@@ -39,8 +39,19 @@
     }
     .open-drawer-btn:hover { background: #e63946; color: #fff; }
 
-    /* Summary table */
-    .count-note { color: #888; font-size: 0.82rem; margin-bottom: 0.4rem; }
+    /* Interests toggle */
+    .toggle-list-btn {
+      display: flex; align-items: center; gap: 0.6rem;
+      width: 100%; max-width: 800px;
+      padding: 0.65rem 1rem; margin-bottom: 0.5rem;
+      background: #16213e; border: 1px solid #2e2e50; border-radius: 8px;
+      color: #ccc; font-size: 0.9rem; cursor: pointer; text-align: left;
+    }
+    .toggle-list-btn:hover { border-color: #555; color: #fff; }
+    .toggle-list-btn #toggle-list-count { color: #f4d03f; font-weight: 600; }
+    .toggle-list-btn #toggle-list-arrow { margin-left: auto; font-size: 0.75rem; transition: transform 0.2s; }
+    .toggle-list-btn.open #toggle-list-arrow { transform: rotate(180deg); }
+    #interests-table { max-width: 800px; }
     table { width: 100%; border-collapse: collapse; font-size: 0.87rem; }
     th { text-align: left; color: #aaa; padding: 0.4rem 0.5rem; border-bottom: 1px solid #2e2e50; white-space: nowrap; }
     td { padding: 0.4rem 0.5rem; border-bottom: 1px solid #1e1e3a; vertical-align: top; }
@@ -154,13 +165,19 @@
       &#9654; Open Donor Analysis
     </button>
 
-    <p class="count-note" id="count-note"></p>
-    <table>
-      <thead>
-        <tr><th>Donor / Interest</th><th>Value</th><th>Category</th><th>Registered</th><th>Detail</th></tr>
-      </thead>
-      <tbody id="interests-body"></tbody>
-    </table>
+    <button class="toggle-list-btn" id="toggle-list">
+      <span id="toggle-list-label">Show declared interests</span>
+      <span id="toggle-list-count"></span>
+      <span id="toggle-list-arrow">▼</span>
+    </button>
+    <div id="interests-table" style="display:none">
+      <table>
+        <thead>
+          <tr><th>Donor / Interest</th><th>Value</th><th>Category</th><th>Registered</th><th>Detail</th></tr>
+        </thead>
+        <tbody id="interests-body"></tbody>
+      </table>
+    </div>
   </div>
 
   <!-- Overlay -->
@@ -278,8 +295,12 @@
       document.getElementById('card-img').src =
         `/card/${data.id}?name=${encodeURIComponent(data.name)}`;
 
-      document.getElementById('count-note').textContent =
-        `Showing all ${data.count} declared interest${data.count !== 1 ? 's' : ''}.`;
+      document.getElementById('toggle-list-count').textContent =
+        `${data.count} entr${data.count !== 1 ? 'ies' : 'y'}`;
+      // Reset toggle to closed state on each new lookup
+      document.getElementById('interests-table').style.display = 'none';
+      document.getElementById('toggle-list').classList.remove('open');
+      document.getElementById('toggle-list-label').textContent = 'Show declared interests';
 
       const tbody = document.getElementById('interests-body');
       tbody.innerHTML = (data.interests || []).map(i => {
@@ -439,6 +460,15 @@
       } finally {
         analyseBtn.disabled = false;
       }
+    });
+
+    document.getElementById('toggle-list').addEventListener('click', () => {
+      const table = document.getElementById('interests-table');
+      const btn = document.getElementById('toggle-list');
+      const label = document.getElementById('toggle-list-label');
+      const isOpen = btn.classList.toggle('open');
+      table.style.display = isOpen ? 'block' : 'none';
+      label.textContent = isOpen ? 'Hide declared interests' : 'Show declared interests';
     });
 
     submitBtn.addEventListener('click', lookup);
