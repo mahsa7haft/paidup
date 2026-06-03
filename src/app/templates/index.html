@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PaidUp</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #1a1a2e; color: #fff; min-height: 100vh; padding: 2rem 1rem; }
+    h1 { font-size: 2rem; font-weight: 700; color: #e63946; }
+    p.sub { color: #aaa; margin: 0.4rem 0 2rem; }
+
+    /* Search */
+    .search { display: flex; gap: 0.5rem; max-width: 500px; }
+    input[type=text] { flex: 1; padding: 0.7rem 1rem; border-radius: 6px; border: 1px solid #333; font-size: 1rem; background: #16213e; color: #fff; }
+    button.primary { padding: 0.7rem 1.4rem; background: #e63946; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 1rem; font-weight: 600; }
+    button.primary:disabled { opacity: 0.5; cursor: wait; }
+    .error { color: #e63946; margin-top: 1rem; }
+
+    /* Results summary */
+    #result { margin-top: 2rem; display: none; max-width: 800px; }
+    .mp-name { font-size: 1.5rem; font-weight: 700; }
+    .mp-meta { color: #aaa; font-size: 0.9rem; margin-top: 0.2rem; }
+    .total { color: #f4d03f; font-size: 1.1rem; font-weight: 600; margin: 0.5rem 0 0.2rem; }
+    .date-range { color: #888; font-size: 0.82rem; margin-bottom: 0.3rem; }
+    .tag-row { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.5rem 0 1rem; }
+    .tag { background: #16213e; border: 1px solid #2e2e50; border-radius: 4px; padding: 0.2rem 0.5rem; font-size: 0.78rem; color: #9ab; }
+    .tag.govt { border-color: #e63946; color: #f88; }
+    .tag.appg { border-color: #f4d03f; color: #f4d03f; }
+    .card-img { width: 100%; max-width: 800px; border-radius: 10px; margin-bottom: 1.2rem; }
+
+    /* Open drawer button */
+    .open-drawer-btn {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      padding: 0.65rem 1.2rem; background: #16213e;
+      border: 1px solid #e63946; color: #e63946;
+      border-radius: 8px; cursor: pointer; font-size: 0.95rem; font-weight: 600;
+      margin-bottom: 1.2rem; transition: background 0.15s;
+    }
+    .open-drawer-btn:hover { background: #e63946; color: #fff; }
+
+    /* Summary table */
+    .count-note { color: #888; font-size: 0.82rem; margin-bottom: 0.4rem; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.87rem; }
+    th { text-align: left; color: #aaa; padding: 0.4rem 0.5rem; border-bottom: 1px solid #2e2e50; white-space: nowrap; }
+    td { padding: 0.4rem 0.5rem; border-bottom: 1px solid #1e1e3a; vertical-align: top; }
+    td.value { color: #f4d03f; font-weight: 600; white-space: nowrap; }
+    td.cat { color: #888; font-size: 0.78rem; }
+    td.date { color: #777; font-size: 0.78rem; white-space: nowrap; }
+    td.summ { color: #bbb; font-size: 0.8rem; max-width: 240px; }
+
+    /* ── DRAWER ── */
+    .overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.55); z-index: 100;
+    }
+    .overlay.open { display: block; }
+
+    .drawer {
+      position: fixed; top: 0; right: -680px; width: min(680px, 100vw);
+      height: 100vh; overflow-y: auto;
+      background: #12122a; border-left: 1px solid #2e2e50;
+      z-index: 101; transition: right 0.28s ease;
+      display: flex; flex-direction: column;
+    }
+    .drawer.open { right: 0; }
+
+    .drawer-header {
+      position: sticky; top: 0; background: #12122a;
+      border-bottom: 1px solid #2e2e50; padding: 1rem 1.2rem;
+      display: flex; align-items: center; justify-content: space-between; z-index: 1;
+    }
+    .drawer-header h2 { font-size: 1.05rem; color: #ddd; }
+    .close-btn {
+      background: none; border: none; color: #aaa; font-size: 1.4rem;
+      cursor: pointer; line-height: 1; padding: 0.2rem 0.5rem;
+    }
+    .close-btn:hover { color: #fff; }
+
+    .drawer-body { padding: 1.2rem; flex: 1; }
+
+    /* AI section inside drawer */
+    .ai-section { margin-bottom: 1.8rem; }
+    .ai-section h3 { font-size: 0.95rem; color: #aaa; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 0.8rem; }
+    .ai-controls { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin-bottom: 0.8rem; }
+    .ai-controls label { color: #888; font-size: 0.85rem; }
+    select {
+      padding: 0.45rem 0.7rem; background: #1a1a2e; color: #fff;
+      border: 1px solid #333; border-radius: 6px; font-size: 0.88rem; cursor: pointer;
+    }
+    .analyse-btn {
+      padding: 0.45rem 1rem; background: #e63946; color: #fff;
+      border: none; border-radius: 6px; cursor: pointer; font-size: 0.88rem; font-weight: 600;
+    }
+    .analyse-btn:disabled { opacity: 0.5; cursor: wait; }
+    #drawer-ai-result {
+      white-space: pre-wrap; line-height: 1.75; font-size: 0.9rem; color: #ddd;
+      background: #0f0f22; border-radius: 8px; padding: 1rem; min-height: 60px;
+    }
+    #drawer-ai-result.loading { color: #666; font-style: italic; }
+    #drawer-ai-error { color: #e63946; font-size: 0.85rem; margin-top: 0.4rem; }
+
+    /* Donor list inside drawer */
+    .donor-section { margin-bottom: 1.8rem; }
+    .donor-section h3 { font-size: 0.95rem; color: #aaa; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 0.8rem; }
+    .donor-list { display: flex; flex-direction: column; gap: 0.5rem; }
+    .donor-card {
+      background: #1a1a2e; border: 1px solid #2e2e50; border-radius: 8px; padding: 0.8rem 1rem;
+    }
+    .donor-card .dc-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem; }
+    .donor-card .dc-name { font-weight: 600; font-size: 0.92rem; }
+    .donor-card .dc-value { color: #f4d03f; font-weight: 700; font-size: 0.92rem; white-space: nowrap; }
+    .donor-card .dc-meta { color: #888; font-size: 0.78rem; margin-top: 0.3rem; }
+    .donor-card .dc-summary { color: #bbb; font-size: 0.82rem; margin-top: 0.25rem; }
+
+    /* Sources section */
+    .sources-section h3 { font-size: 0.95rem; color: #aaa; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 0.7rem; }
+    .source-link {
+      display: flex; align-items: center; gap: 0.5rem;
+      padding: 0.5rem 0; border-bottom: 1px solid #1e1e3a; font-size: 0.85rem;
+    }
+    .source-link:last-child { border-bottom: none; }
+    .source-link .sl-label { color: #888; min-width: 140px; }
+    .source-link a { color: #7ec8e3; text-decoration: none; word-break: break-all; }
+    .source-link a:hover { text-decoration: underline; }
+
+    /* TWFY stats row */
+    .stats-row { display: flex; flex-wrap: wrap; gap: 1rem; margin: 0.5rem 0 1rem; }
+    .stat-box { background: #16213e; border-radius: 8px; padding: 0.6rem 1rem; min-width: 110px; }
+    .stat-box .sb-val { font-size: 1.3rem; font-weight: 700; color: #f4d03f; }
+    .stat-box .sb-label { font-size: 0.72rem; color: #888; margin-top: 0.1rem; }
+  </style>
+</head>
+<body>
+  <h1>PaidUp</h1>
+  <p class="sub">See who funds UK politicians.</p>
+
+  <div class="search">
+    <input id="name" type="text" placeholder="Enter an MP's name…" />
+    <button class="primary" id="submit">Look up</button>
+  </div>
+  <p id="error" class="error"></p>
+
+  <div id="result">
+    <div class="mp-name" id="mp-name"></div>
+    <div class="mp-meta" id="mp-meta"></div>
+    <div class="total" id="mp-total"></div>
+    <div class="date-range" id="mp-date-range"></div>
+    <div class="tag-row" id="mp-tags"></div>
+
+    <img id="card-img" class="card-img" src="" alt="Donor card" />
+
+    <button class="open-drawer-btn" id="open-drawer">
+      &#9654; Open Donor Analysis
+    </button>
+
+    <p class="count-note" id="count-note"></p>
+    <table>
+      <thead>
+        <tr><th>Donor / Interest</th><th>Value</th><th>Category</th><th>Registered</th><th>Detail</th></tr>
+      </thead>
+      <tbody id="interests-body"></tbody>
+    </table>
+  </div>
+
+  <!-- Overlay -->
+  <div class="overlay" id="overlay"></div>
+
+  <!-- Slide-in Drawer -->
+  <div class="drawer" id="drawer">
+    <div class="drawer-header">
+      <h2 id="drawer-title">Donor Analysis</h2>
+      <button class="close-btn" id="close-drawer">&#x2715;</button>
+    </div>
+    <div class="drawer-body">
+
+      <!-- AI Analysis at the top -->
+      <div class="ai-section">
+        <h3>AI Analysis</h3>
+        <div class="ai-controls">
+          <label for="prompt-select">Style:</label>
+          <select id="prompt-select">
+            {% for opt in prompt_options %}
+            <option value="{{ opt.key }}">{{ opt.label }} (v{{ opt.version }})</option>
+            {% endfor %}
+          </select>
+          <button class="analyse-btn" id="analyse-btn">Run</button>
+        </div>
+        <div id="drawer-ai-error"></div>
+        <div id="drawer-ai-result"></div>
+      </div>
+
+      <!-- Parliamentary activity stats (from TheyWorkForYou) -->
+      <div class="donor-section" id="twfy-section" style="display:none">
+        <h3>Parliamentary Activity <span style="color:#555;font-size:0.72rem;font-weight:400">via TheyWorkForYou</span></h3>
+        <div class="stats-row" id="twfy-stats"></div>
+        <div id="twfy-appg" style="font-size:0.84rem;color:#bbb;"></div>
+      </div>
+
+      <!-- Full donor list -->
+      <div class="donor-section">
+        <h3>All Declared Interests</h3>
+        <div class="donor-list" id="drawer-donor-list"></div>
+      </div>
+
+      <!-- Data sources -->
+      <div class="sources-section">
+        <h3>Data Sources</h3>
+        <div id="sources-list"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    const submitBtn = document.getElementById('submit');
+    const input = document.getElementById('name');
+    const err = document.getElementById('error');
+    const result = document.getElementById('result');
+    const drawer = document.getElementById('drawer');
+    const overlay = document.getElementById('overlay');
+    const analyseBtn = document.getElementById('analyse-btn');
+
+    let currentMp = null;
+
+    // ── Lookup ──
+    async function lookup() {
+      const name = input.value.trim();
+      if (!name) return;
+      submitBtn.disabled = true;
+      err.textContent = '';
+      result.style.display = 'none';
+
+      try {
+        const res = await fetch('/lookup', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({name})
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Request failed');
+
+        currentMp = data;
+        renderSummary(data);
+        result.style.display = 'block';
+      } catch (e) {
+        err.textContent = e.message;
+      } finally {
+        submitBtn.disabled = false;
+      }
+    }
+
+    function renderSummary(data) {
+      document.getElementById('mp-name').textContent = data.name;
+      document.getElementById('mp-meta').textContent =
+        [data.party, data.constituency].filter(Boolean).join(' · ');
+      document.getElementById('mp-total').textContent =
+        `Total declared: £${data.total.toLocaleString()}`;
+
+      const dr = document.getElementById('mp-date-range');
+      dr.textContent = data.oldest && data.newest
+        ? `Register entries from ${data.oldest} to ${data.newest}`
+        : '';
+
+      // Tags: committees, govt posts
+      const tags = document.getElementById('mp-tags');
+      tags.innerHTML = '';
+      const addTag = (label, cls = '') => {
+        const t = document.createElement('span');
+        t.className = 'tag' + (cls ? ' ' + cls : '');
+        t.textContent = label;
+        tags.appendChild(t);
+      };
+      (data.govt_posts || []).forEach(p => addTag(p, 'govt'));
+      (data.opposition_posts || []).forEach(p => addTag(p, 'govt'));
+      (data.committees || []).slice(0, 4).forEach(c => addTag(c));
+
+      document.getElementById('card-img').src =
+        `/card/${data.id}?name=${encodeURIComponent(data.name)}`;
+
+      document.getElementById('count-note').textContent =
+        `Showing all ${data.count} declared interest${data.count !== 1 ? 's' : ''}.`;
+
+      const tbody = document.getElementById('interests-body');
+      tbody.innerHTML = (data.interests || []).map(i => `
+        <tr>
+          <td>${i.donor}</td>
+          <td class="value">${i.value ? '£' + i.value.toLocaleString() : 'In kind'}</td>
+          <td class="cat">${i.category}</td>
+          <td class="date">${i.date || '—'}</td>
+          <td class="summ">${i.summary || ''}</td>
+        </tr>
+      `).join('');
+    }
+
+    // ── Drawer ──
+    function openDrawer() {
+      if (!currentMp) return;
+      document.getElementById('drawer-title').textContent =
+        `${currentMp.name} — Donor Analysis`;
+      renderDrawerDonors(currentMp.interests || []);
+      renderTwfy(currentMp.twfy);
+      renderSources(currentMp.sources || {}, currentMp);
+      // Reset AI panel
+      document.getElementById('drawer-ai-result').textContent = '';
+      document.getElementById('drawer-ai-error').textContent = '';
+      drawer.classList.add('open');
+      overlay.classList.add('open');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeDrawer() {
+      drawer.classList.remove('open');
+      overlay.classList.remove('open');
+      document.body.style.overflow = '';
+    }
+
+    document.getElementById('open-drawer').addEventListener('click', openDrawer);
+    document.getElementById('close-drawer').addEventListener('click', closeDrawer);
+    overlay.addEventListener('click', closeDrawer);
+
+    function renderDrawerDonors(interests) {
+      const list = document.getElementById('drawer-donor-list');
+      if (!interests.length) {
+        list.innerHTML = '<p style="color:#666">No declared interests on record.</p>';
+        return;
+      }
+      list.innerHTML = interests.map(i => {
+        const val = i.value ? `£${i.value.toLocaleString()}` : 'In kind';
+        const meta = [i.category, i.date ? `Registered ${i.date}` : ''].filter(Boolean).join(' · ');
+        return `
+          <div class="donor-card">
+            <div class="dc-top">
+              <span class="dc-name">${i.donor}</span>
+              <span class="dc-value">${val}</span>
+            </div>
+            <div class="dc-meta">${meta}</div>
+            ${i.summary ? `<div class="dc-summary">${i.summary}</div>` : ''}
+          </div>`;
+      }).join('');
+    }
+
+    function renderTwfy(twfy) {
+      const section = document.getElementById('twfy-section');
+      if (!twfy) { section.style.display = 'none'; return; }
+      section.style.display = 'block';
+
+      const stats = document.getElementById('twfy-stats');
+      stats.innerHTML = '';
+      const addStat = (val, label) => {
+        if (val == null) return;
+        stats.innerHTML += `
+          <div class="stat-box">
+            <div class="sb-val">${val}</div>
+            <div class="sb-label">${label}</div>
+          </div>`;
+      };
+      addStat(twfy.votes_with_party_pct != null ? twfy.votes_with_party_pct + '%' : null, 'Votes with party');
+      addStat(twfy.rebellions, 'Rebellions');
+      addStat(twfy.debates_count, 'Debates');
+      addStat(twfy.written_answers_count, 'Written answers');
+
+      const appgEl = document.getElementById('twfy-appg');
+      if (twfy.appg_roles && twfy.appg_roles.length) {
+        appgEl.innerHTML = '<strong style="color:#f4d03f">APPG roles:</strong> ' +
+          twfy.appg_roles.join(' &nbsp;·&nbsp; ');
+      } else {
+        appgEl.textContent = '';
+      }
+    }
+
+    function renderSources(sources, mp) {
+      const SOURCE_LABELS = {
+        parliament_member: 'Parliament member page',
+        interests_register: 'Register of Members\' Financial Interests',
+        twfy_profile: 'TheyWorkForYou profile',
+        appg_register: 'APPG Register',
+      };
+      const SOURCE_DESCS = {
+        parliament_member: 'Official Parliament profile, committee memberships, career',
+        interests_register: 'Declared financial interests (official, updated within 28 days)',
+        twfy_profile: 'Voting record, rebellion stats, APPG roles',
+        appg_register: 'Full register of all All-Party Parliamentary Groups',
+      };
+      const el = document.getElementById('sources-list');
+      el.innerHTML = Object.entries(sources)
+        .filter(([, url]) => url)
+        .map(([key, url]) => `
+          <div class="source-link">
+            <span class="sl-label">${SOURCE_LABELS[key] || key}</span>
+            <div>
+              <a href="${url}" target="_blank" rel="noopener">${url}</a>
+              <div style="color:#666;font-size:0.75rem;margin-top:0.1rem">${SOURCE_DESCS[key] || ''}</div>
+            </div>
+          </div>`).join('');
+    }
+
+    // ── AI Analysis ──
+    analyseBtn.addEventListener('click', async () => {
+      if (!currentMp) return;
+      const promptKey = document.getElementById('prompt-select').value;
+      const aiResult = document.getElementById('drawer-ai-result');
+      const aiError = document.getElementById('drawer-ai-error');
+
+      analyseBtn.disabled = true;
+      aiResult.textContent = 'Analysing…';
+      aiResult.className = 'loading';
+      aiError.textContent = '';
+
+      try {
+        const res = await fetch('/analyze', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            name: currentMp.name,
+            party: currentMp.party,
+            constituency: currentMp.constituency,
+            interests: currentMp.interests,
+            committees: currentMp.committees || [],
+            twfy: currentMp.twfy || null,
+            bio: {
+              govt_posts: currentMp.govt_posts || [],
+              opposition_posts: currentMp.opposition_posts || [],
+            },
+            prompt_key: promptKey,
+          })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Analysis failed');
+        aiResult.textContent = data.result;
+        aiResult.className = '';
+      } catch (e) {
+        aiResult.textContent = '';
+        aiError.textContent = e.message;
+      } finally {
+        analyseBtn.disabled = false;
+      }
+    });
+
+    submitBtn.addEventListener('click', lookup);
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') lookup(); });
+  </script>
+</body>
+</html>

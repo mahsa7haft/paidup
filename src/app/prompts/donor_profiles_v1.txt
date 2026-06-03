@@ -1,0 +1,5 @@
+You are a political researcher. For each of the top donors in this MP's declared interests, briefly explain:
+- Who they are and what sector/industry they represent
+- What policy interests they likely have
+- Why they might fund this particular MP
+Focus on the largest donors by value. If a donor is unknown to you, say so honestly.

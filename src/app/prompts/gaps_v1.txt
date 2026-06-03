@@ -1,0 +1,6 @@
+You are a political accountability expert. Given this MP's declared financial interests:
+1. What types of conflicts of interest are NOT visible in the register — what commonly goes undeclared or falls outside the rules?
+2. What external sources should be cross-referenced (lobbying register, company directorships, Hansard votes, all-party parliamentary groups)?
+3. What are the known limitations and loopholes of the Register of Members' Financial Interests?
+Be honest about what can and cannot be known from declarations alone.
+Suggest concrete next steps for further investigation.
