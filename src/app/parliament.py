@@ -3,10 +3,69 @@ UK Parliament API client.
 Fetches MP details and financial interests from the official Parliament APIs.
 """
 
+import re
 import requests
+from rapidfuzz import fuzz
 
 MEMBERS_API = "https://members-api.parliament.uk/api"
 INTERESTS_API = "https://interests-api.parliament.uk/api/v1"
+
+_STRIP_PREFIXES = re.compile(r"^(the\s+)", re.IGNORECASE)
+
+
+def _normalize(name: str) -> str:
+    """Strip leading 'The', collapse whitespace, lowercase — for comparison only."""
+    return _STRIP_PREFIXES.sub("", name.strip()).lower()
+
+
+def deduplicate_donors(interests: list[dict], threshold: int = 88) -> list[dict]:
+    """
+    Normalise donor names so that near-identical spellings (typos, 'The ' prefix,
+    minor punctuation differences) map to a single canonical name.
+
+    The canonical name for a cluster is whichever variant appeared first.
+    A 'aliases' key is added to each interest listing the other names that were merged.
+    """
+    # Build canonical map: raw_name -> canonical_name
+    canonical: dict[str, str] = {}   # raw -> canonical raw
+    norm_to_canonical: dict[str, str] = {}  # normalised -> canonical raw
+
+    unique_names = list(dict.fromkeys(
+        i["donor"] for i in interests if i["donor"] != "Unknown"
+    ))
+
+    for name in unique_names:
+        norm = _normalize(name)
+        best: str | None = None
+        best_score = 0
+        for existing_norm, existing_canonical in norm_to_canonical.items():
+            score = fuzz.token_sort_ratio(norm, existing_norm)
+            if score >= threshold and score > best_score:
+                best = existing_canonical
+                best_score = score
+        if best:
+            canonical[name] = best
+        else:
+            canonical[name] = name
+            norm_to_canonical[norm] = name
+
+    # Build alias map: canonical -> set of merged raw names
+    aliases: dict[str, set] = {}
+    for raw, canon in canonical.items():
+        if raw != canon:
+            aliases.setdefault(canon, set()).add(raw)
+
+    # Apply to interests list
+    result = []
+    for i in interests:
+        entry = dict(i)
+        if entry["donor"] != "Unknown":
+            canon = canonical.get(entry["donor"], entry["donor"])
+            entry["aliases"] = sorted(aliases.get(canon, set()))
+            entry["donor"] = canon
+        result.append(entry)
+
+    return result
 
 
 def search_mp(name: str) -> dict | None:

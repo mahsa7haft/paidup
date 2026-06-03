@@ -10,7 +10,7 @@ load_dotenv(os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
 from flask import Flask, render_template, request, jsonify, send_file
 from app.parliament import (
     search_mp, get_interests, get_biography,
-    parse_interests, date_range, parse_biography,
+    parse_interests, date_range, parse_biography, deduplicate_donors,
 )
 from app.card import generate_card
 from app.ai import analyze, prompt_options
@@ -41,7 +41,7 @@ def lookup():
     mp_name = mp["nameDisplayAs"]
 
     interests = get_interests(member_id)
-    parsed = parse_interests(interests)
+    parsed = deduplicate_donors(parse_interests(interests))
     total = sum(i["value"] for i in parsed)
     oldest, newest = date_range(parsed)
 
@@ -111,7 +111,7 @@ def analyze_mp():
 def card(member_id):
     mp_name = request.args.get("name", "")
     interests = get_interests(member_id)
-    parsed = parse_interests(interests)
+    parsed = deduplicate_donors(parse_interests(interests))
     img = generate_card(member_id, mp_name, parsed)
     buf = io.BytesIO()
     img.save(buf, format="PNG")

@@ -68,18 +68,24 @@ def generate_card(member_id: int, name: str, interests: list[dict]) -> Image.Ima
     draw.text((PHOTO_W + 20, 52), f"Total declared: £{total:,.0f}", fill=TOTAL_COLOUR, font=font_sub)
     draw.text((PHOTO_W + 20, 72), "Paid up by:", fill="#aaaaaa", font=font_sub)
 
-    # Sponsor badges
-    donors = [i for i in interests if i["donor"] != "Unknown"][:10]
+    # Aggregate donations by donor name, then sort by total descending
+    aggregated: dict[str, float] = {}
+    for i in interests:
+        if i["donor"] == "Unknown":
+            continue
+        aggregated[i["donor"]] = aggregated.get(i["donor"], 0.0) + i["value"]
+    donors = sorted(aggregated.items(), key=lambda x: x[1], reverse=True)[:10]
+
     start_x = PHOTO_W + 20
     start_y = 100
 
-    for idx, donor in enumerate(donors):
+    for idx, (donor_name, donor_total) in enumerate(donors):
         col = idx % BADGE_COLS
         row = idx // BADGE_COLS
         x = start_x + col * (BADGE_W + BADGE_GAP)
         y = start_y + row * (BADGE_H + BADGE_GAP)
         if y + BADGE_H > CARD_H - 20:
             break
-        _draw_badge(draw, x, y, donor["donor"], donor["value"])
+        _draw_badge(draw, x, y, donor_name, donor_total)
 
     return card

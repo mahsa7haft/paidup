@@ -282,15 +282,19 @@
         `Showing all ${data.count} declared interest${data.count !== 1 ? 's' : ''}.`;
 
       const tbody = document.getElementById('interests-body');
-      tbody.innerHTML = (data.interests || []).map(i => `
+      tbody.innerHTML = (data.interests || []).map(i => {
+        const aliasNote = i.aliases && i.aliases.length
+          ? `<div style="color:#666;font-size:0.75rem;margin-top:2px">also listed as: ${i.aliases.join(', ')}</div>`
+          : '';
+        return `
         <tr>
-          <td>${i.donor}</td>
+          <td>${i.donor}${aliasNote}</td>
           <td class="value">${i.value ? '£' + i.value.toLocaleString() : 'In kind'}</td>
           <td class="cat">${i.category}</td>
           <td class="date">${i.date || '—'}</td>
           <td class="summ">${i.summary || ''}</td>
-        </tr>
-      `).join('');
+        </tr>`;
+      }).join('');
     }
 
     // ── Drawer ──
