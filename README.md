@@ -140,7 +140,15 @@ PYTHONPATH=src python -m app.main
 > If Railway uses `uv`, the command would be:
 > `PYTHONPATH=src uv run python -m app.main`
 
-### 5. Add Redis (recommended)
+### 5. Add Postgres (recommended)
+
+In your Railway project, click **+ New** → **Database** → **PostgreSQL**. Railway provisions a Postgres instance and injects `DATABASE_URL` automatically.
+
+With Postgres enabled, AI analysis results are stored persistently for **28 days** (Parliament's register update cycle). The first analysis for each MP + prompt style costs one Claude API call — every subsequent request within 28 days is free and instant, and survives app restarts and redeployments.
+
+The `/health` endpoint reports `"db": true` when the connection is live.
+
+### 6. Add Redis (recommended)
 
 In your Railway project, click **+ New** → **Database** → **Redis**. Railway provisions a Redis instance and automatically injects `REDIS_URL` into your app's environment. No extra configuration needed.
 
@@ -151,7 +159,7 @@ With Redis enabled:
 
 Without Redis the app works identically — caching is silently disabled.
 
-### 6. Deploy
+### 7. Deploy
 
 Railway deploys automatically on every push to `main`. Once the build completes, click the generated URL to open the live app.
 

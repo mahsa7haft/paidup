@@ -22,7 +22,7 @@ PORT=8080 PYTHONPATH=src uv run python -m app.main
 
 ```
 Browser POST /lookup
-  → cache.get("paidup:lookup:{name}")   return immediately if hit
+  → L1 cache.get("paidup:lookup:{name}")   return immediately if hit (Redis)
   → search_mp()           Parliament Members API — find member ID, name, party
   → get_interests()       Parliament Interests API — all declared financial interests
   → parse_interests()     normalise fields, extract donor/value/date/category
@@ -33,14 +33,15 @@ Browser POST /lookup
   → cache.set(result, ttl=1h)
   → return JSON
 
-Browser POST /analyze
-  → cache.get("paidup:analyze:{id}:{prompt_key}:{version}")   return if hit
-  → analyze() in ai.py
+Browser POST /analyze  ← two-level cache
+  → L1 cache.get(...)                  Redis, 24h TTL
+  → L2 db.get_analysis(...)            Postgres analyses table, 28-day TTL
+  → analyze() in ai.py                 Claude API — only reached on full miss
       → loads prompt from prompts/{key}_v{n}.txt
-      → builds structured user message with all MP context
-      → calls claude-sonnet-4-6 via Anthropic SDK
-  → cache.set(result, ttl=24h)
-  → return plain text
+      → calls claude-sonnet-4-6
+  → db.save_analysis(...)              write to Postgres
+  → cache.set(...)                     write to Redis
+  → return text
 
 GET /card/{member_id}
   → fetches interests (same pipeline as /lookup, no cache)
@@ -58,22 +59,30 @@ GET /card/{member_id}
 | `theyworkforyou.py` | TheyWorkForYou API. Always returns `None` gracefully if key not set. |
 | `ai.py` | Anthropic SDK call. Loads prompts from disk at call time (not cached in memory). |
 | `card.py` | Pillow image generation. Reads from no external state except the MP photo URL. |
-| `cache.py` | Redis wrapper. Returns `None` / no-ops silently when Redis is unavailable. |
+| `cache.py` | Redis wrapper (L1). Returns `None` / no-ops silently when Redis is unavailable. |
+| `database.py` | PostgreSQL layer (L2). Stores AI analyses for 28 days. No-ops when DATABASE_URL is unset. |
 
 ## Key design decisions
 
-### Caching
+### Two-level cache for `/analyze`
 
-`cache.py` wraps Redis with a graceful no-op fallback — when `REDIS_URL` is unset or Redis is unreachable the app behaves identically, just without caching. TTLs:
+`/analyze` uses L1 (Redis, 24h) → L2 (Postgres, 28 days) → Claude API.
 
-| Route | Key | TTL |
-|---|---|---|
-| `/lookup` | `paidup:lookup:{normalised_name}` | 1 hour |
-| `/analyze` | `paidup:analyze:{member_id}:{prompt_key}:{prompt_version}` | 24 hours |
+- **L1 Redis**: answers "did someone ask this in the last 24 hours?" — instant, in-memory
+- **L2 Postgres**: answers "have we ever run this analysis and is it still fresh?" — persistent across restarts and deploys
+- **Claude**: only reached when both miss — the expensive call
 
-The prompt version is included in the analyze key deliberately — bumping `summary_v1.txt` to `summary_v2.txt` changes the key and therefore invalidates stale cached results automatically.
+On an L2 hit, Redis is repopulated so the next request doesn't reach Postgres either.
 
-Cached responses include `"_cached": true` so you can spot them in the browser network tab.
+The `_cached` field in the response shows which layer served it (`"redis"`, `"db"`, or absent for a fresh Claude call) — visible in the browser network tab.
+
+### Why 28 days for Postgres TTL
+
+Parliament's Register of Members' Financial Interests is updated within 28 days of any change. After 28 days an analysis result could reference stale data so it is discarded and regenerated.
+
+### Prompt version in cache keys
+
+Both the Redis key and the Postgres query include `prompt_version`. Bumping `summary_v1.txt` to `summary_v2.txt` changes the version, which changes the Redis key (cache miss) and fails the Postgres WHERE clause (DB miss), so Claude is always called fresh after a prompt edit.
 
 ### Deduplication happens at the `lookup` level, not in `parse_interests`
 
@@ -93,7 +102,7 @@ Prompts live in `src/app/prompts/` as plain text files named `{key}_v{n}.txt`. `
 
 1. Copy `summary_v1.txt` → `summary_v2.txt`
 2. Edit freely
-3. Restart — the new version is picked up and the old analysis cache is automatically invalidated
+3. Restart — the new version is picked up and both caches are automatically invalidated
 4. The UI dropdown shows the version number
 
 ### Fuzzy donor deduplication
@@ -109,5 +118,6 @@ Known limitation: legal suffixes (`Ltd`, `Limited`, `plc`) can push similar name
 | `ANTHROPIC_API_KEY` | Yes (for AI features) | sk-ant-... |
 | `THEYWORKFORYOU_API_KEY` | No | Free at theyworkforyou.com/api/key |
 | `FLASK_SECRET_KEY` | No (dev default exists) | Set to a long random string in production |
-| `REDIS_URL` | No | Enables caching; Railway Redis plugin sets this automatically |
+| `REDIS_URL` | No | L1 cache; Railway Redis plugin sets this automatically |
+| `DATABASE_URL` | No | L2 persistent store; Railway Postgres plugin sets this automatically |
 | `PORT` | No | Defaults to 5002; Railway sets this automatically |
