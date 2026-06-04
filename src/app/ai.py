@@ -139,3 +139,9 @@ def prompt_options() -> list[dict]:
         {"key": k, "label": v["label"], "version": v["version"]}
         for k, v in _load_prompts().items()
     ]
+
+
+def get_prompt_version(prompt_key: str) -> int:
+    """Return the current version number for a prompt key (used in cache keys)."""
+    prompts = _load_prompts()
+    return prompts.get(prompt_key, {}).get("version", 1)

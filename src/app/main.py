@@ -13,8 +13,9 @@ from app.parliament import (
     parse_interests, date_range, parse_biography, deduplicate_donors,
 )
 from app.card import generate_card
-from app.ai import analyze, prompt_options
+from app.ai import analyze, prompt_options, get_prompt_version
 from app.theyworkforyou import get_mp_data as get_twfy_data
+import app.cache as cache
 import io
 
 app = Flask(__name__)
@@ -33,6 +34,14 @@ def lookup():
     if not name:
         return jsonify({"error": "No name provided"}), 400
 
+    # ── cache check ──────────────────────────────────────────────────────────
+    ck = cache.make_key("lookup", name)
+    cached = cache.get(ck)
+    if cached:
+        cached["_cached"] = True
+        return jsonify(cached)
+
+    # ── fetch ────────────────────────────────────────────────────────────────
     mp = search_mp(name)
     if not mp:
         return jsonify({"error": f"No MP found for '{name}'"}), 404
@@ -40,14 +49,11 @@ def lookup():
     member_id = mp["id"]
     mp_name = mp["nameDisplayAs"]
 
-    interests = get_interests(member_id)
-    parsed = deduplicate_donors(parse_interests(interests))
-    total = sum(i["value"] for i in parsed)
-    oldest, newest = date_range(parsed)
+    interests = deduplicate_donors(parse_interests(get_interests(member_id)))
+    total = sum(i["value"] for i in interests)
+    oldest, newest = date_range(interests)
 
-    bio = get_biography(member_id)
-    bio_data = parse_biography(bio)
-
+    bio_data = parse_biography(get_biography(member_id))
     twfy = get_twfy_data(mp_name)
 
     sources = {
@@ -57,28 +63,27 @@ def lookup():
         "appg_register": "https://www.parliament.uk/mps-lords-and-offices/standards-and-financial-interests/all-party-parliamentary-groups/",
     }
 
-    return jsonify({
+    result = {
         "id": member_id,
         "name": mp_name,
         "party": mp["latestParty"]["name"],
         "constituency": mp.get("memberFrom", ""),
         "total": total,
-        "count": len(parsed),
+        "count": len(interests),
         "oldest": oldest,
         "newest": newest,
-        # Biography data
         "committees": bio_data["committees"],
         "govt_posts": bio_data["govt_posts"],
         "opposition_posts": bio_data["opposition_posts"],
         "other_posts": bio_data["other_posts"],
         "party_history": bio_data["party_history"],
-        # TheyWorkForYou
         "twfy": twfy,
-        # Full interests
-        "interests": parsed,
-        # Data sources
+        "interests": interests,
         "sources": sources,
-    })
+    }
+
+    cache.set(ck, result, ttl=cache.LOOKUP_TTL)
+    return jsonify(result)
 
 
 @app.route("/analyze", methods=["POST"])
@@ -88,9 +93,20 @@ def analyze_mp():
         return jsonify({"error": "Missing required fields"}), 400
 
     prompt_key = data.get("prompt_key", "summary")
+    member_id = data.get("id")
 
+    # ── cache check ──────────────────────────────────────────────────────────
+    # Include prompt version in key so editing a prompt file busts the cache.
+    version = get_prompt_version(prompt_key)
+    ck = cache.make_key("analyze", str(member_id or ""), prompt_key, str(version))
+    cached = cache.get(ck)
+    if cached:
+        cached["_cached"] = True
+        return jsonify(cached)
+
+    # ── run analysis ─────────────────────────────────────────────────────────
     try:
-        result = analyze(
+        text = analyze(
             mp_name=data["name"],
             party=data.get("party", ""),
             constituency=data.get("constituency", ""),
@@ -100,7 +116,10 @@ def analyze_mp():
             bio=data.get("bio", {}),
             prompt_key=prompt_key,
         )
-        return jsonify({"result": result})
+        result = {"result": text}
+        if member_id:
+            cache.set(ck, result, ttl=cache.ANALYSIS_TTL)
+        return jsonify(result)
     except ValueError as e:
         return jsonify({"error": str(e)}), 503
     except Exception as e:
@@ -110,9 +129,8 @@ def analyze_mp():
 @app.route("/card/<int:member_id>")
 def card(member_id):
     mp_name = request.args.get("name", "")
-    interests = get_interests(member_id)
-    parsed = deduplicate_donors(parse_interests(interests))
-    img = generate_card(member_id, mp_name, parsed)
+    interests = deduplicate_donors(parse_interests(get_interests(member_id)))
+    img = generate_card(member_id, mp_name, interests)
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     buf.seek(0)

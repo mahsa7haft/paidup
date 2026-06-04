@@ -126,6 +126,7 @@ In your Railway project, go to **Variables** and add:
 | `ANTHROPIC_API_KEY` | Your Anthropic API key |
 | `THEYWORKFORYOU_API_KEY` | Your TheyWorkForYou key (optional) |
 | `FLASK_SECRET_KEY` | Any long random string |
+| `REDIS_URL` | Set automatically by the Railway Redis plugin (see below) |
 | `PORT` | Railway sets this automatically — do not override |
 
 ### 4. Set the start command
@@ -139,7 +140,18 @@ PYTHONPATH=src python -m app.main
 > If Railway uses `uv`, the command would be:
 > `PYTHONPATH=src uv run python -m app.main`
 
-### 5. Deploy
+### 5. Add Redis (recommended)
+
+In your Railway project, click **+ New** → **Database** → **Redis**. Railway provisions a Redis instance and automatically injects `REDIS_URL` into your app's environment. No extra configuration needed.
+
+With Redis enabled:
+- Parliament lookups are cached for **1 hour** — repeated searches for the same MP are instant
+- AI analysis results are cached for **24 hours** per MP + prompt style combination
+- Prompt version is included in the cache key, so saving a new prompt version (`summary_v2.txt`) automatically invalidates old cached results
+
+Without Redis the app works identically — caching is silently disabled.
+
+### 6. Deploy
 
 Railway deploys automatically on every push to `main`. Once the build completes, click the generated URL to open the live app.
 
