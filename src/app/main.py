@@ -16,10 +16,14 @@ from app.card import generate_card
 from app.ai import analyze, prompt_options, get_prompt_version
 from app.theyworkforyou import get_mp_data as get_twfy_data
 import app.cache as cache
+import app.database as db
 import io
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret")
+
+# Create DB tables on startup (no-op if DATABASE_URL not set)
+db.ensure_tables()
 
 
 @app.route("/")
@@ -34,14 +38,14 @@ def lookup():
     if not name:
         return jsonify({"error": "No name provided"}), 400
 
-    # ── cache check ──────────────────────────────────────────────────────────
+    # L1: Redis
     ck = cache.make_key("lookup", name)
     cached = cache.get(ck)
     if cached:
-        cached["_cached"] = True
+        cached["_cached"] = "redis"
         return jsonify(cached)
 
-    # ── fetch ────────────────────────────────────────────────────────────────
+    # Fetch from Parliament APIs
     mp = search_mp(name)
     if not mp:
         return jsonify({"error": f"No MP found for '{name}'"}), 404
@@ -94,17 +98,25 @@ def analyze_mp():
 
     prompt_key = data.get("prompt_key", "summary")
     member_id = data.get("id")
-
-    # ── cache check ──────────────────────────────────────────────────────────
-    # Include prompt version in key so editing a prompt file busts the cache.
     version = get_prompt_version(prompt_key)
+
+    # L1: Redis (hot, short-lived)
     ck = cache.make_key("analyze", str(member_id or ""), prompt_key, str(version))
     cached = cache.get(ck)
     if cached:
-        cached["_cached"] = True
+        cached["_cached"] = "redis"
         return jsonify(cached)
 
-    # ── run analysis ─────────────────────────────────────────────────────────
+    # L2: PostgreSQL (persistent, 28-day TTL)
+    if member_id:
+        stored = db.get_analysis(member_id, prompt_key, version)
+        if stored:
+            result = {"result": stored, "_cached": "db"}
+            # Repopulate Redis so the next request doesn't hit Postgres
+            cache.set(ck, {"result": stored}, ttl=cache.ANALYSIS_TTL)
+            return jsonify(result)
+
+    # Origin: Claude API
     try:
         text = analyze(
             mp_name=data["name"],
@@ -117,8 +129,11 @@ def analyze_mp():
             prompt_key=prompt_key,
         )
         result = {"result": text}
+
         if member_id:
+            db.save_analysis(member_id, prompt_key, version, text)
             cache.set(ck, result, ttl=cache.ANALYSIS_TTL)
+
         return jsonify(result)
     except ValueError as e:
         return jsonify({"error": str(e)}), 503
@@ -139,7 +154,13 @@ def card(member_id):
 
 @app.route("/health")
 def health():
-    return jsonify({"status": "ok"})
+    redis_ok = cache._get() is not None
+    db_ok = db._get_pool() is not None
+    return jsonify({
+        "status": "ok",
+        "redis": redis_ok,
+        "db": db_ok,
+    })
 
 
 if __name__ == "__main__":

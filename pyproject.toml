@@ -12,6 +12,7 @@ dependencies = [
     "anthropic>=0.40",
     "rapidfuzz>=3.14.5",
     "redis>=8.0.0",
+    "psycopg2-binary>=2.9.12",
 ]
 
 [build-system]
