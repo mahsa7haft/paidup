@@ -84,6 +84,8 @@ FLASK_SECRET_KEY=change-me
 
 > The Parliament APIs require no key. Only the AI features need `ANTHROPIC_API_KEY`.
 
+> **Cost note:** each click of "Analyse with Claude" makes one API call using `claude-sonnet-4-6`. At typical interest-register sizes (~1,000 tokens in, ~400 out) this costs roughly **$0.003–0.005 per analysis**. Running all five prompt styles on one MP costs under $0.025. There is no background polling — the API is only called when you explicitly click the button.
+
 ### 4. Run the app
 
 ```bash
