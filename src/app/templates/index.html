@@ -105,10 +105,20 @@
     }
     .analyse-btn:disabled { opacity: 0.5; cursor: wait; }
     #drawer-ai-result {
-      white-space: pre-wrap; line-height: 1.75; font-size: 0.9rem; color: #ddd;
-      background: #0f0f22; border-radius: 8px; padding: 1rem; min-height: 60px;
+      line-height: 1.75; font-size: 0.9rem; color: #ddd;
+      background: #0f0f22; border-radius: 8px; padding: 1rem 1.2rem; min-height: 60px;
     }
-    #drawer-ai-result.loading { color: #666; font-style: italic; }
+    #drawer-ai-result.loading { color: #666; font-style: italic; white-space: normal; }
+    #drawer-ai-result h1,
+    #drawer-ai-result h2  { color: #fff; font-size: 1rem; margin: 1rem 0 0.4rem; }
+    #drawer-ai-result h3  { color: #ccc; font-size: 0.9rem; margin: 0.8rem 0 0.3rem; }
+    #drawer-ai-result p   { margin-bottom: 0.65rem; }
+    #drawer-ai-result ul,
+    #drawer-ai-result ol  { padding-left: 1.3rem; margin-bottom: 0.65rem; }
+    #drawer-ai-result li  { margin-bottom: 0.25rem; }
+    #drawer-ai-result strong { color: #fff; }
+    #drawer-ai-result a   { color: #7ec8e3; }
+    #drawer-ai-result hr  { border: none; border-top: 1px solid #2e2e50; margin: 0.8rem 0; }
     #drawer-ai-error { color: #e63946; font-size: 0.85rem; margin-top: 0.4rem; }
 
     /* Donor list inside drawer */
@@ -141,6 +151,7 @@
     .stat-box .sb-val { font-size: 1.3rem; font-weight: 700; color: #f4d03f; }
     .stat-box .sb-label { font-size: 0.72rem; color: #888; margin-top: 0.1rem; }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
   <h1>PaidUp</h1>
@@ -327,7 +338,7 @@
       renderTwfy(currentMp.twfy);
       renderSources(currentMp.sources || {}, currentMp);
       // Reset AI panel
-      document.getElementById('drawer-ai-result').textContent = '';
+      document.getElementById('drawer-ai-result').innerHTML = '';
       document.getElementById('drawer-ai-error').textContent = '';
       drawer.classList.add('open');
       overlay.classList.add('open');
@@ -428,7 +439,7 @@
       const aiError = document.getElementById('drawer-ai-error');
 
       analyseBtn.disabled = true;
-      aiResult.textContent = 'Analysing…';
+      aiResult.textContent = 'Analysing…';  // plain text while loading
       aiResult.className = 'loading';
       aiError.textContent = '';
 
@@ -453,10 +464,10 @@
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Analysis failed');
-        aiResult.textContent = data.result;
+        aiResult.innerHTML = marked.parse(data.result);
         aiResult.className = '';
       } catch (e) {
-        aiResult.textContent = '';
+        aiResult.innerHTML = '';
         aiError.textContent = e.message;
       } finally {
         analyseBtn.disabled = false;

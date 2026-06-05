@@ -12,6 +12,12 @@ import anthropic
 
 PROMPTS_DIR = Path(__file__).parent / "prompts"
 
+# Appended to every system prompt — keeps responses focused on analysis, not raw data.
+_SHARED_RULES = """
+Format your response using markdown (headings, bold, bullet points).
+Do NOT reproduce or list the raw donor entries — the user can see that data separately.
+Focus entirely on patterns, insights, conflicts of interest, and conclusions drawn from the data."""
+
 # Human-readable labels for the UI, keyed by prompt base name.
 LABELS: dict[str, str] = {
     "summary": "Plain English Summary",
@@ -127,7 +133,7 @@ def analyze(
     message = client.messages.create(
         model="claude-sonnet-4-6",
         max_tokens=1200,
-        system=prompt_cfg["system"],
+        system=prompt_cfg["system"] + _SHARED_RULES,
         messages=[{"role": "user", "content": user_message}],
     )
     return message.content[0].text
