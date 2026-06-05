@@ -5,63 +5,93 @@ Fetches MP details and financial interests from the official Parliament APIs.
 
 import re
 import requests
-from rapidfuzz import fuzz
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 
 MEMBERS_API = "https://members-api.parliament.uk/api"
 INTERESTS_API = "https://interests-api.parliament.uk/api/v1"
 
-_STRIP_PREFIXES = re.compile(r"^(the\s+)", re.IGNORECASE)
+# Legal / corporate suffixes stripped before comparison
+_SUFFIXES = re.compile(
+    r"\b(limited|ltd|plc|llp|lp|l\.p\.|corp|corporation|"
+    r"incorporated|inc|group|holdings|& co|and co|co)\b\.?",
+    re.IGNORECASE,
+)
+_THE = re.compile(r"^the\s+", re.IGNORECASE)
+_SPACE = re.compile(r"\s+")
 
 
 def _normalize(name: str) -> str:
-    """Strip leading 'The', collapse whitespace, lowercase — for comparison only."""
-    return _STRIP_PREFIXES.sub("", name.strip()).lower()
-
-
-def deduplicate_donors(interests: list[dict], threshold: int = 88) -> list[dict]:
     """
-    Normalise donor names so that near-identical spellings (typos, 'The ' prefix,
-    minor punctuation differences) map to a single canonical name.
+    Strip 'The' prefix and legal suffixes, collapse whitespace, lowercase.
+    Used only for comparison — the original name is kept as the displayed value.
 
-    The canonical name for a cluster is whichever variant appeared first.
-    A 'aliases' key is added to each interest listing the other names that were merged.
+    Examples:
+      'The Arsenal Football Club Limited' → 'arsenal football club'
+      'Arsenal Football Club'            → 'arsenal football club'
+      'Pece and Justice Project'         → 'pece and justice project'
     """
-    # Build canonical map: raw_name -> canonical_name
-    canonical: dict[str, str] = {}   # raw -> canonical raw
-    norm_to_canonical: dict[str, str] = {}  # normalised -> canonical raw
+    name = _THE.sub("", name.strip())
+    name = _SUFFIXES.sub("", name)
+    return _SPACE.sub(" ", name).strip().lower()
 
+
+def deduplicate_donors(interests: list[dict], threshold: float = 0.82) -> list[dict]:
+    """
+    Cluster near-identical donor names using TF-IDF character n-gram cosine similarity.
+
+    Step 1 — normalize: strip legal suffixes ('Limited', 'Ltd', 'plc', etc.)
+              and the 'The ' prefix so structural variants become identical.
+    Step 2 — vectorise: character 2-3 gram TF-IDF captures remaining typos.
+    Step 3 — cosine similarity: cluster names above threshold.
+
+    The canonical name for each cluster is whichever variant appeared first
+    in the sorted-by-value interests list. Merged variants are stored in
+    'aliases' so the UI can show what was grouped.
+    """
     unique_names = list(dict.fromkeys(
         i["donor"] for i in interests if i["donor"] != "Unknown"
     ))
 
-    for name in unique_names:
-        norm = _normalize(name)
-        best: str | None = None
-        best_score = 0
-        for existing_norm, existing_canonical in norm_to_canonical.items():
-            score = fuzz.token_sort_ratio(norm, existing_norm)
-            if score >= threshold and score > best_score:
-                best = existing_canonical
-                best_score = score
-        if best:
-            canonical[name] = best
-        else:
-            canonical[name] = name
-            norm_to_canonical[norm] = name
+    if len(unique_names) < 2:
+        return [dict(i) | {"aliases": []} for i in interests]
 
-    # Build alias map: canonical -> set of merged raw names
-    aliases: dict[str, set] = {}
+    normalized = [_normalize(n) for n in unique_names]
+
+    # Vectorise with character 2-3 grams
+    vec = TfidfVectorizer(analyzer="char_wb", ngram_range=(2, 3), min_df=1)
+    try:
+        matrix = vec.fit_transform(normalized)
+    except ValueError:
+        return [dict(i) | {"aliases": []} for i in interests]
+
+    sim = cosine_similarity(matrix)
+
+    # Greedy clustering — first-seen name in each cluster is canonical
+    canonical: dict[str, str] = {}
+    clustered: set[str] = set()
+
+    for i, name in enumerate(unique_names):
+        if name in clustered:
+            continue
+        canonical[name] = name
+        clustered.add(name)
+        for j, other in enumerate(unique_names):
+            if j != i and other not in clustered and sim[i, j] >= threshold:
+                canonical[other] = name
+                clustered.add(other)
+
+    aliases_map: dict[str, set] = {}
     for raw, canon in canonical.items():
         if raw != canon:
-            aliases.setdefault(canon, set()).add(raw)
+            aliases_map.setdefault(canon, set()).add(raw)
 
-    # Apply to interests list
     result = []
     for i in interests:
         entry = dict(i)
         if entry["donor"] != "Unknown":
             canon = canonical.get(entry["donor"], entry["donor"])
-            entry["aliases"] = sorted(aliases.get(canon, set()))
+            entry["aliases"] = sorted(aliases_map.get(canon, set()))
             entry["donor"] = canon
         result.append(entry)
 
