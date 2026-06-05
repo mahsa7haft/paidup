@@ -164,8 +164,9 @@ def generate_card(member_id: int, name: str, interests: list[dict]) -> Image.Ima
         sized = [(n, v, _badge_radius(v, max_val)) for n, v in donors]
         sized.sort(key=lambda x: x[2], reverse=True)
 
-        # Suit area: lower ~55 % of the photo region
-        suit_top    = photo_y + int(PHOTO_H * 0.45)
+        # Suit area: lower ~38% of the photo — Parliament headshots
+        # are tight crops so the jacket starts around 62% down.
+        suit_top    = photo_y + int(PHOTO_H * 0.62)
         suit_bottom = photo_y + PHOTO_H - 8
         suit_left   = photo_x + 8
         suit_right  = photo_x + PHOTO_W - 8
@@ -179,7 +180,7 @@ def generate_card(member_id: int, name: str, interests: list[dict]) -> Image.Ima
                 font_badge_lg,
             )
 
-    # ── right panel: name, total, donor list ──
+    # ── right panel: name, total, donor count ──
     rx = PHOTO_W + 24
     ry = 20
 
@@ -187,24 +188,20 @@ def generate_card(member_id: int, name: str, interests: list[dict]) -> Image.Ima
     ry += 34
 
     total = sum(i["value"] for i in interests)
-    draw.text((rx, ry), f"Total declared: £{total:,.0f}", fill=GOLD, font=font_sub)
-    ry += 22
-    draw.text((rx, ry), "Paid up by:", fill=TEXT_DIM, font=font_sub)
-    ry += 20
+    draw.text((rx, ry), f"£{round(total):,}", fill=GOLD, font=font_name_lg)
+    ry += 30
+    draw.text((rx, ry), "total declared", fill=TEXT_DIM, font=font_sub)
+    ry += 28
 
-    # Separator line
     draw.line([(rx, ry), (CARD_W - 20, ry)], fill="#2e2e50", width=1)
-    ry += 10
+    ry += 16
 
-    # Top-donor list on the right (name + total)
-    panel_w = CARD_W - rx - 20
-    for donor_name, donor_total in donors[:12]:
-        if ry + 16 > CARD_H - 10:
-            break
-        short = textwrap.shorten(donor_name, width=panel_w // 8, placeholder="…")
-        draw.text((rx, ry), short, fill=TEXT_W, font=font_badge_sm)
-        val_str = _fmt(donor_total)
-        draw.text((CARD_W - 20, ry), val_str, fill=GOLD, font=font_badge_sm, anchor="ra")
-        ry += 17
+    donor_count = len(donors)
+    draw.text((rx, ry), f"{donor_count} declared donor{'' if donor_count == 1 else 's'}", fill=TEXT_DIM, font=font_sub)
+    ry += 20
+    draw.text((rx, ry), "Badge size = total donated", fill="#555577", font=font_badge_sm)
+
+    # PaidUp watermark bottom-right
+    draw.text((CARD_W - 16, CARD_H - 14), "paidup.app", fill="#333355", font=font_badge_sm, anchor="ra")
 
     return card
