@@ -225,12 +225,6 @@
         <div id="twfy-appg" style="font-size:0.84rem;color:#bbb;"></div>
       </div>
 
-      <!-- Full donor list -->
-      <div class="donor-section">
-        <h3>All Declared Interests</h3>
-        <div class="donor-list" id="drawer-donor-list"></div>
-      </div>
-
       <!-- Data sources -->
       <div class="sources-section">
         <h3>Data Sources</h3>
@@ -334,7 +328,6 @@
       if (!currentMp) return;
       document.getElementById('drawer-title').textContent =
         `${currentMp.name} — Donor Analysis`;
-      renderDrawerDonors(currentMp.interests || []);
       renderTwfy(currentMp.twfy);
       renderSources(currentMp.sources || {}, currentMp);
       // Reset AI panel
@@ -354,27 +347,6 @@
     document.getElementById('open-drawer').addEventListener('click', openDrawer);
     document.getElementById('close-drawer').addEventListener('click', closeDrawer);
     overlay.addEventListener('click', closeDrawer);
-
-    function renderDrawerDonors(interests) {
-      const list = document.getElementById('drawer-donor-list');
-      if (!interests.length) {
-        list.innerHTML = '<p style="color:#666">No declared interests on record.</p>';
-        return;
-      }
-      list.innerHTML = interests.map(i => {
-        const val = i.value ? `£${i.value.toLocaleString()}` : 'In kind';
-        const meta = [i.category, i.date ? `Registered ${i.date}` : ''].filter(Boolean).join(' · ');
-        return `
-          <div class="donor-card">
-            <div class="dc-top">
-              <span class="dc-name">${i.donor}</span>
-              <span class="dc-value">${val}</span>
-            </div>
-            <div class="dc-meta">${meta}</div>
-            ${i.summary ? `<div class="dc-summary">${i.summary}</div>` : ''}
-          </div>`;
-      }).join('');
-    }
 
     function renderTwfy(twfy) {
       const section = document.getElementById('twfy-section');
