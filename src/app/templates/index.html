@@ -107,7 +107,15 @@
       line-height: 1.75; font-size: 0.9rem; color: #333;
       background: #fff; border: 1px solid #e8e0d4; border-radius: 8px; padding: 1rem 1.2rem; min-height: 60px;
     }
-    #drawer-ai-result.loading { color: #aaa; font-style: italic; }
+    #drawer-ai-result.loading { min-height: 60px; display: flex; align-items: center; }
+    .loading-phrase {
+      color: #888; font-style: italic; font-size: 0.9rem;
+      animation: phraseIn 0.5s ease;
+    }
+    @keyframes phraseIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
     #drawer-ai-result h1, #drawer-ai-result h2 { color: #1a1a1a; font-size: 1rem; margin: 1rem 0 0.4rem; }
     #drawer-ai-result h3 { color: #444; font-size: 0.9rem; margin: 0.8rem 0 0.3rem; }
     #drawer-ai-result p { margin-bottom: 0.65rem; }
@@ -388,9 +396,31 @@
       const aiResult = document.getElementById('drawer-ai-result');
       const aiError = document.getElementById('drawer-ai-error');
       analyseBtn.disabled = true;
-      aiResult.textContent = 'Analysing…';
-      aiResult.className = 'loading';
       aiError.textContent = '';
+      aiResult.className = 'loading';
+
+      const phrases = [
+        'Scrutinising the register…',
+        'Following the money…',
+        'Connecting the dots…',
+        'Tracing the donors…',
+        'Mapping the interests…',
+        'Reading between the lines…',
+        'Pulling the thread…',
+        'Cross-referencing entries…',
+        'Examining the evidence…',
+        'Digging deeper…',
+        'Checking who paid…',
+        'Auditing the donations…',
+      ];
+      let phraseIdx = 0;
+      const showPhrase = () => {
+        aiResult.innerHTML = `<span class="loading-phrase">${phrases[phraseIdx % phrases.length]}</span>`;
+        phraseIdx++;
+      };
+      showPhrase();
+      const phraseTimer = setInterval(showPhrase, 2200);
+
       try {
         const res = await fetch('/analyze', {
           method: 'POST',
@@ -405,9 +435,11 @@
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Analysis failed');
+        clearInterval(phraseTimer);
         aiResult.innerHTML = marked.parse(data.result);
         aiResult.className = '';
       } catch (e) {
+        clearInterval(phraseTimer);
         aiResult.innerHTML = '';
         aiError.textContent = e.message;
       } finally {
