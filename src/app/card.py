@@ -268,9 +268,16 @@ def _layout_badges(interests: list[dict]) -> list[dict]:
                    key=lambda x: x[2], reverse=True)
 
     photo_y = (CARD_H - PHOTO_H) // 2
-    suit_top    = photo_y + int(PHOTO_H * 0.62)
+    suit_top    = photo_y + int(PHOTO_H * 0.65)  # 65% down — keeps badges off the face
     suit_bottom = photo_y + PHOTO_H - 8
     placed = _pack(sized, 8, suit_top, PHOTO_W - 8, suit_bottom)
+
+    # Shift all badges down so they sit at the bottom of the suit area.
+    # With few badges they hug the bottom; only climb upward when there are too many.
+    if placed:
+        lowest = max(cy + r for _, cy, r, _, _ in placed)
+        shift  = max(0, suit_bottom - lowest - 4)
+        placed = [(cx, cy + shift, r, n, v) for cx, cy, r, n, v in placed]
 
     result = []
     for cx, cy, r, dname, dval in placed:
