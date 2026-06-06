@@ -30,24 +30,23 @@
 
     /* Results summary */
     #result { margin-top: 2rem; display: none; max-width: 800px; }
-    .mp-name { font-size: 1.5rem; font-weight: 700; color: #1a1a1a; }
-    .mp-meta { color: #666; font-size: 0.9rem; margin-top: 0.2rem; }
-    .total { color: #1a1a1a; font-size: 1.4rem; font-weight: 700; margin: 0.6rem 0 0.2rem; }
     .date-range { color: #888; font-size: 0.82rem; margin-bottom: 0.3rem; }
     .tag-row { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.5rem 0 1rem; }
     .tag { background: #e8e0d4; border: 1px solid #c8c0b0; border-radius: 4px; padding: 0.2rem 0.5rem; font-size: 0.78rem; color: #555; }
     .tag.govt { border-color: #1D9E75; color: #1D9E75; background: #eef8f4; }
-    .card-img { width: 100%; max-width: 800px; border-radius: 10px; margin-bottom: 1.2rem; border: 1px solid #d8d0c4; }
+    .card-img { width: 100%; max-width: 800px; border-radius: 10px 10px 0 0; margin-bottom: 0; border: 1px solid #d8d0c4; border-bottom: none; display: block; }
 
-    /* Open drawer button */
+    /* Analyse button — full-width CTA flush below the card */
     .open-drawer-btn {
-      display: inline-flex; align-items: center; gap: 0.5rem;
-      padding: 0.65rem 1.2rem; background: #fff;
-      border: 1.5px solid #1D9E75; color: #1D9E75;
-      border-radius: 8px; cursor: pointer; font-size: 0.95rem; font-weight: 600;
-      margin-bottom: 1.2rem; transition: background 0.15s, color 0.15s;
+      display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+      width: 100%; max-width: 800px;
+      padding: 0.8rem 1.2rem; background: #1D9E75; color: #fff;
+      border: 1.5px solid #1D9E75; border-top: none;
+      border-radius: 0 0 10px 10px;
+      cursor: pointer; font-size: 0.95rem; font-weight: 600;
+      margin-bottom: 1.4rem; transition: background 0.15s;
     }
-    .open-drawer-btn:hover { background: #1D9E75; color: #fff; }
+    .open-drawer-btn:hover { background: #178a64; border-color: #178a64; }
 
     /* Interests toggle */
     .toggle-list-btn {
@@ -203,17 +202,14 @@
   <p id="error" class="error"></p>
 
   <div id="result">
-    <div class="mp-name" id="mp-name"></div>
-    <div class="mp-meta" id="mp-meta"></div>
-    <div class="total" id="mp-total"></div>
     <div class="date-range" id="mp-date-range"></div>
     <div class="tag-row" id="mp-tags"></div>
 
-    <button class="open-drawer-btn" id="open-drawer">
-      &#9654; Open Donor Analysis
-    </button>
-
     <img id="card-img" class="card-img" src="" alt="Donor card" />
+
+    <button class="open-drawer-btn" id="open-drawer">
+      &#128269; Open Donor Analysis
+    </button>
 
     <button class="toggle-list-btn" id="toggle-list">
       <span id="toggle-list-label">Show declared interests</span>
@@ -309,12 +305,6 @@
     }
 
     function renderSummary(data) {
-      document.getElementById('mp-name').textContent = data.name;
-      document.getElementById('mp-meta').textContent =
-        [data.party, data.constituency].filter(Boolean).join(' · ');
-      document.getElementById('mp-total').textContent =
-        `£${Math.round(data.total).toLocaleString()} declared to Parliament`;
-
       const dr = document.getElementById('mp-date-range');
       dr.textContent = data.oldest && data.newest
         ? `Data covers ${data.oldest} to ${data.newest}` : '';
