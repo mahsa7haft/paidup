@@ -383,11 +383,12 @@ def generate_card(member_id: int, name: str, interests: list[dict],
         placed = _pack(sized, photo_x + 8, suit_top, photo_x + PHOTO_W - 8, suit_bottom)
 
         for cx, cy, r, dname, dval in placed:
-            badge_type, domain = _classify_donor(dname)
             fv = font_badge_val if r >= 22 else font_badge_name
             fn = font_badge_name
             if dname == "Unknown":
                 _draw_anonymous_badge(draw, cx, cy, r, dval, fv, fn)
+                continue
+            badge_type, domain = _classify_donor(dname)
             elif badge_type == "company_logo" and domain:
                 _draw_company_logo_badge(card, draw, cx, cy, r, dname, dval, domain, fv, fn)
             elif badge_type == "person":
