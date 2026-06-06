@@ -82,6 +82,28 @@ def _fetch_photo(member_id: int) -> Image.Image | None:
         return None
 
 
+def _fit_photo(photo: Image.Image, target_w: int, target_h: int) -> Image.Image:
+    """
+    Scale the photo to fill the target dimensions without stretching.
+    Strategy: scale so the image fills the target height, then centre-crop
+    to the target width. Parliament headshots are square (240×240), so
+    this zooms in slightly and produces a natural portrait crop.
+    """
+    src_w, src_h = photo.size
+    scale = target_h / src_h
+    new_w, new_h = int(src_w * scale), target_h
+    photo = photo.resize((new_w, new_h), Image.LANCZOS)
+    if new_w >= target_w:
+        left = (new_w - target_w) // 2
+        photo = photo.crop((left, 0, left + target_w, new_h))
+    else:
+        # Narrower than target — pad sides with cream (rare)
+        canvas = Image.new(photo.mode, (target_w, new_h), CREAM[:7])
+        canvas.paste(photo, ((target_w - new_w) // 2, 0))
+        photo = canvas
+    return photo
+
+
 def _fetch_logo(domain: str) -> Image.Image | None:
     try:
         r = requests.get(f"https://logo.clearbit.com/{domain}", timeout=4)
@@ -211,10 +233,11 @@ def _draw_company_logo_badge(img: Image.Image, draw: ImageDraw.ImageDraw,
     draw.ellipse([cx-r, cy-r, cx+r, cy+r], fill=COMPANY_FILL, outline=COMPANY_RIM, width=2)
     logo = _fetch_logo(domain)
     if logo:
-        logo_size = int(r * 1.5)
+        # Logo occupies the top ~60% of the circle; value sits in the bottom quarter
+        logo_size = int(r * 1.2)
         logo = logo.resize((logo_size, logo_size), Image.LANCZOS)
-        img.paste(logo, (cx - logo_size // 2, cy - logo_size // 2), logo)
-        draw.text((cx, cy + r + 10), _fmt(value), fill=BADGE_VAL, font=font_val, anchor="mm")
+        img.paste(logo, (cx - logo_size // 2, cy - logo_size // 2 - r // 6), logo)
+        draw.text((cx, cy + r // 3), _fmt(value), fill=BADGE_VAL, font=font_val, anchor="mm")
     else:
         inits = _initials(name)
         draw.text((cx, cy - r // 4), inits, fill=BADGE_TEXT, font=font_val, anchor="mm")
@@ -320,7 +343,7 @@ def generate_card(member_id: int, name: str, interests: list[dict],
     photo = _fetch_photo(member_id)
     photo_x, photo_y = 0, (CARD_H - PHOTO_H) // 2
     if photo:
-        photo = photo.resize((PHOTO_W, PHOTO_H), Image.LANCZOS)
+        photo = _fit_photo(photo, PHOTO_W, PHOTO_H)
         if photo.mode == "RGBA":
             card.paste(photo, (photo_x, photo_y), photo)
         else:
