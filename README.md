@@ -124,6 +124,71 @@ docker start paidup-postgres  # restart
 docker rm -f paidup-postgres  # delete completely
 ```
 
+#### Inspecting and editing the database
+
+Open an interactive Postgres shell:
+
+```bash
+docker exec -it paidup-postgres psql -U paidup -d paidup
+```
+
+Useful commands once inside:
+
+```sql
+\dt                             -- list all tables
+SELECT * FROM donor_company_links;
+SELECT member_id, prompt_key, generated_at FROM analyses ORDER BY generated_at DESC;
+\q                              -- quit
+```
+
+Run a one-off query without entering the shell:
+
+```bash
+docker exec paidup-postgres psql -U paidup -d paidup \
+  -c "SELECT * FROM donor_company_links;"
+```
+
+#### The two tables
+
+**`donor_company_links`** — maps donor names to company logo domains. Seeded lazily by Claude Haiku the first time a new donor is seen; never re-queried after that.
+
+| Column | Meaning |
+|---|---|
+| `donor_name` | Name as it appears in the Parliament register |
+| `company_name` | Display name of the linked company (if any) |
+| `logo_domain` | Domain passed to Clearbit for logo fetching — or `__person__` if the donor is a private individual with no company link |
+| `source` | `ai` (resolved by Claude Haiku) or `manual` (hand-corrected) |
+
+Manually correct a wrong domain:
+
+```bash
+docker exec paidup-postgres psql -U paidup -d paidup \
+  -c "UPDATE donor_company_links SET logo_domain = 'correct-domain.com', source = 'manual' \
+      WHERE donor_name = 'Donor Name Here';"
+```
+
+Manually seed a known person → company link (e.g. before any card is rendered):
+
+```bash
+docker exec paidup-postgres psql -U paidup -d paidup \
+  -c "INSERT INTO donor_company_links (donor_name, company_name, logo_domain, source) \
+      VALUES ('Lord David Sainsbury', 'Sainsbury''s', 'sainsburys.co.uk', 'manual') \
+      ON CONFLICT (donor_name) DO UPDATE \
+        SET logo_domain = EXCLUDED.logo_domain, source = 'manual';"
+```
+
+**`analyses`** — cached AI analysis reports, kept for 28 days (Parliament's register update cycle). Cleared automatically when stale.
+
+```bash
+# See all cached analyses
+docker exec paidup-postgres psql -U paidup -d paidup \
+  -c "SELECT member_id, prompt_key, prompt_version, generated_at FROM analyses ORDER BY generated_at DESC;"
+
+# Force re-analysis for a specific MP (deletes their cached result)
+docker exec paidup-postgres psql -U paidup -d paidup \
+  -c "DELETE FROM analyses WHERE member_id = 4514;"
+```
+
 ### 5. Run the app
 
 ```bash
