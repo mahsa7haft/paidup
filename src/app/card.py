@@ -439,11 +439,10 @@ def _draw_person_badge(draw: ImageDraw.ImageDraw,
                         name: str, value: float,
                         font_val: ImageFont.FreeTypeFont,
                         font_name: ImageFont.FreeTypeFont) -> None:
-    """Dark green circle with SVG-faithful head + bezier-arch shoulder silhouette."""
-    draw.ellipse([cx-r, cy-r, cx+r, cy+r], fill=PERSON_FILL, outline=PERSON_RIM, width=2)
+    """Brand-green person silhouette floating on the suit — no circle background."""
     head_r  = max(4, int(r * 0.25))
     head_cy = cy - int(r * 0.27)
-    _person_silhouette(draw, cx, head_cy, head_r, "white")
+    _person_silhouette(draw, cx, head_cy, head_r, BRAND_GREEN)
 
 
 def _draw_anonymous_badge(draw: ImageDraw.ImageDraw,
@@ -452,28 +451,25 @@ def _draw_anonymous_badge(draw: ImageDraw.ImageDraw,
                           font_val: ImageFont.FreeTypeFont,
                           font_name: ImageFont.FreeTypeFont) -> None:
     """
-    Dark grey circle replicating the anonymous SVG:
-    ghost figure (offset, faded) behind a foreground figure with '?' on the head.
+    No circle. Ghost figure (light grey, offset) behind a brand-green foreground
+    figure with a white '?' on the head — matching the anonymous SVG reference.
     """
-    draw.ellipse([cx-r, cy-r, cx+r, cy+r], fill=ANON_FILL, outline=ANON_RIM, width=2)
-
     head_r  = max(4, int(r * 0.25))
     head_cy = cy - int(r * 0.27)
 
     if r >= 26:
-        # Ghost figure: slightly smaller, offset right-and-up, mid-grey
-        g_hr = max(3, int(head_r * 0.80))
-        g_cx = cx + int(r * 0.14)
-        g_cy = head_cy - int(r * 0.06)
-        _person_silhouette(draw, g_cx, g_cy, g_hr, "#888888")
-        # Foreground shifted slightly left
+        # Ghost: slightly smaller, shifted right-and-up
+        g_hr  = max(3, int(head_r * 0.80))
+        g_cx  = cx + int(r * 0.14)
+        g_cy  = head_cy - int(r * 0.06)
+        _person_silhouette(draw, g_cx, g_cy, g_hr, "#c0c0c0")
         fg_cx = cx - int(r * 0.07)
     else:
         fg_cx = cx
 
-    _person_silhouette(draw, fg_cx, head_cy, head_r, "#c8c8c8")
+    _person_silhouette(draw, fg_cx, head_cy, head_r, BRAND_GREEN)
 
-    # '?' on foreground head — sized to fill the head circle
+    # White '?' on the foreground head
     q_size = max(8, int(head_r * 1.3))
     qfont  = font_name
     for path in ["/System/Library/Fonts/Helvetica.ttc", "/System/Library/Fonts/Arial.ttf"]:
@@ -482,7 +478,7 @@ def _draw_anonymous_badge(draw: ImageDraw.ImageDraw,
             break
         except Exception:
             pass
-    draw.text((fg_cx, head_cy), "?", fill=ANON_FILL, font=qfont, anchor="mm")
+    draw.text((fg_cx, head_cy), "?", fill="white", font=qfont, anchor="mm")
 
 
 
