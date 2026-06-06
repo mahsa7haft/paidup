@@ -325,8 +325,12 @@
       document.getElementById('card-img').src =
         `/card/${data.id}?name=${encodeURIComponent(data.name)}&party=${party}`;
 
-      document.getElementById('toggle-list-count').textContent =
-        `${data.count} entr${data.count !== 1 ? 'ies' : 'y'}`;
+      const knownInterests = (data.interests || []).filter(i => i.donor !== 'Unknown');
+      const unknownCount = data.count - knownInterests.length;
+      const countLabel = unknownCount > 0
+        ? `${knownInterests.length} entr${knownInterests.length !== 1 ? 'ies' : 'y'} · ${unknownCount} unattributed`
+        : `${data.count} entr${data.count !== 1 ? 'ies' : 'y'}`;
+      document.getElementById('toggle-list-count').textContent = countLabel;
       document.getElementById('interests-table').style.display = 'none';
       document.getElementById('toggle-list').classList.remove('open');
       document.getElementById('toggle-list-label').textContent = 'Show declared interests';
@@ -334,7 +338,7 @@
       renderSources(data.sources || {});
 
       const tbody = document.getElementById('interests-body');
-      tbody.innerHTML = (data.interests || []).map(i => {
+      tbody.innerHTML = knownInterests.map(i => {
         const aliasNote = i.aliases && i.aliases.length
           ? `<div style="color:#aaa;font-size:0.75rem;margin-top:2px">also listed as: ${i.aliases.join(', ')}</div>`
           : '';

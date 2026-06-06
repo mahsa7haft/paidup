@@ -140,7 +140,7 @@ def analyze(
     return message.content[0].text
 
 
-_RESOLVE_SYSTEM = """\
+_RESOLVE_PERSON_SYSTEM = """\
 You are a UK political research assistant. Given a donor name from the UK Parliament
 Register of Members' Financial Interests, determine whether this person is the founder,
 owner, or controlling shareholder of a well-known company.
@@ -157,6 +157,21 @@ Rules:
 - If the name is clearly a company (Ltd, PLC, Trust, Foundation suffix) return null/null.
 - If uncertain, return null/null."""
 
+_RESOLVE_COMPANY_SYSTEM = """\
+You are a research assistant. Given a company or organisation name, return its primary
+website domain so a logo can be fetched.
+
+Reply ONLY with a JSON object — no prose, no markdown fences:
+  {"domain": "ndtv.com"}
+or, if you do not know a reliable domain:
+  {"domain": null}
+
+Rules:
+- Return only the root domain (e.g. barings.com, not www.barings.com/investments).
+- Use the .co.uk domain for UK companies where that is their primary web presence.
+- If the name is a person rather than a company, return null.
+- If uncertain, return null."""
+
 
 def resolve_person_to_company(donor_name: str) -> tuple[str | None, str | None]:
     """
@@ -172,7 +187,7 @@ def resolve_person_to_company(donor_name: str) -> tuple[str | None, str | None]:
         msg = client.messages.create(
             model="claude-haiku-4-5-20251001",
             max_tokens=80,
-            system=_RESOLVE_SYSTEM,
+            system=_RESOLVE_PERSON_SYSTEM,
             messages=[{"role": "user", "content": donor_name}],
         )
         raw = msg.content[0].text.strip()
@@ -186,6 +201,34 @@ def resolve_person_to_company(donor_name: str) -> tuple[str | None, str | None]:
         import logging
         logging.getLogger(__name__).warning("resolve_person_to_company failed: %s", exc)
         return None, None
+
+
+def resolve_company_domain(company_name: str) -> str | None:
+    """
+    Ask Claude Haiku for the primary web domain of a company or organisation.
+    Returns a domain string or None. Never raises.
+    """
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        return None
+    try:
+        client = anthropic.Anthropic(api_key=api_key)
+        msg = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=40,
+            system=_RESOLVE_COMPANY_SYSTEM,
+            messages=[{"role": "user", "content": company_name}],
+        )
+        raw = msg.content[0].text.strip()
+        if not raw:
+            return None
+        raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw, flags=re.DOTALL).strip()
+        data = json.loads(raw)
+        return data.get("domain")
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning("resolve_company_domain failed: %s", exc)
+        return None
 
 
 def prompt_options() -> list[dict]:

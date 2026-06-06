@@ -14,7 +14,7 @@ import textwrap
 import requests
 from io import BytesIO
 from app import database as db
-from app.ai import resolve_person_to_company
+from app.ai import resolve_person_to_company, resolve_company_domain
 from PIL import Image, ImageDraw, ImageFont
 from app.parliament import get_thumbnail_url
 
@@ -171,35 +171,33 @@ def _classify_donor(name: str) -> tuple[str, str | None]:
     """
     Return (badge_type, logo_domain).
     badge_type is one of: 'company_logo', 'company_initials', 'person'.
-    """
-    if not _is_person(name):
-        domain = _guess_domain(name)
-        if domain:
-            return "company_logo", domain
-        return "company_initials", None
 
+    All donors — company or person — go through the DB first (fast, cached),
+    then fall back to Claude Haiku (one call per unknown name, stored forever).
+    """
     link = db.get_donor_company_link(name)
     if link is not None:
-        if link["logo_domain"] and link["logo_domain"] != db.NO_COMPANY:
-            return "company_logo", link["logo_domain"]
-        return "person", None
+        domain = link["logo_domain"]
+        if domain and domain != db.NO_COMPANY:
+            badge = "person" if _is_person(name) and not domain else "company_logo"
+            return badge, domain
+        return "person" if _is_person(name) else "company_initials", None
 
-    company_name, domain = resolve_person_to_company(name)
-    if domain:
-        db.save_donor_company_link(name, company_name, domain, source="ai")
-        return "company_logo", domain
-    else:
+    # DB miss — ask Claude Haiku
+    if _is_person(name):
+        company_name, domain = resolve_person_to_company(name)
+        if domain:
+            db.save_donor_company_link(name, company_name, domain, source="ai")
+            return "company_logo", domain
         db.save_donor_company_link(name, None, db.NO_COMPANY, source="ai")
         return "person", None
-
-
-def _guess_domain(name: str) -> str | None:
-    cleaned = _COMPANY_SUFFIXES.sub("", name).strip().lower()
-    cleaned = re.sub(r"[^a-z0-9\s]", "", cleaned).strip()
-    if not cleaned:
-        return None
-    slug = cleaned.replace(" ", "")
-    return f"{slug}.com" if len(slug) >= 3 else None
+    else:
+        domain = resolve_company_domain(name)
+        if domain:
+            db.save_donor_company_link(name, name, domain, source="ai")
+            return "company_logo", domain
+        db.save_donor_company_link(name, None, db.NO_COMPANY, source="ai")
+        return "company_initials", None
 
 
 def _pack(badges: list[tuple[str, float, int]],
