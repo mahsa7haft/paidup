@@ -178,33 +178,22 @@
     .badge-hotspot {
       position: absolute; border-radius: 50%; pointer-events: all; cursor: default;
     }
-    /* Tooltip styled as a PaidUp magnifying glass — circular lens + diagonal handle */
     .badge-tooltip {
       position: absolute; pointer-events: none; z-index: 10;
-      width: 130px; height: 130px; border-radius: 50%;
-      background: #f0ebe0; border: 2.5px solid #1D9E75;
-      box-shadow: 0 6px 22px rgba(0,0,0,0.18);
-      display: flex; flex-direction: column;
-      align-items: center; justify-content: center;
-      text-align: center; padding: 16px; box-sizing: border-box;
-      transform: translateX(-50%);
+      background: #fff; border: 1px solid #d8d0c4; border-radius: 8px;
+      padding: 0.45rem 0.7rem; box-shadow: 0 4px 16px rgba(0,0,0,0.13);
+      min-width: 110px; max-width: 220px; transform: translateX(-50%);
     }
-    /* Handle — starts near the 4-o'clock edge of the lens, extends at 45° */
     .badge-tooltip::after {
-      content: ''; position: absolute;
-      bottom: 5px; right: 5px;
-      width: 28px; height: 3px;
-      background: #1D9E75; border-radius: 1.5px;
-      transform: rotate(45deg); transform-origin: 0 50%;
+      content: ''; position: absolute; bottom: -7px; left: 50%; transform: translateX(-50%);
+      border: 7px solid transparent; border-top-color: #d8d0c4; border-bottom: none;
     }
-    .badge-tooltip::before { display: none; }
-    .bt-name {
-      font-weight: 600; font-size: 0.73rem; color: #1a1a1a;
-      line-height: 1.35; word-break: break-word;
-      display: -webkit-box; -webkit-line-clamp: 3;
-      -webkit-box-orient: vertical; overflow: hidden;
+    .badge-tooltip::before {
+      content: ''; position: absolute; bottom: -6px; left: 50%; transform: translateX(-50%);
+      border: 6px solid transparent; border-top-color: #fff; border-bottom: none; z-index: 1;
     }
-    .bt-value { color: #1D9E75; font-weight: 700; font-size: 0.85rem; margin-top: 0.25rem; white-space: nowrap; }
+    .bt-name { font-weight: 600; font-size: 0.82rem; color: #1a1a1a; word-break: break-word; }
+    .bt-value { color: #1D9E75; font-weight: 700; font-size: 0.88rem; margin-top: 0.1rem; }
 
     /* Page footer — data sources */
     #page-footer {
