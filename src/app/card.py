@@ -334,22 +334,32 @@ def _layout_badges(interests: list[dict],
     top         = _suit_top(member_id, fitted_photo)
     suit_bottom = (CARD_H - PHOTO_H) // 2 + PHOTO_H - 8
 
-    # If face detection leaves very little room, let badges spill upward into the
-    # photo above suit_top — but never above the face itself (suit_top is the guard).
-    # We handle this by guaranteeing enough vertical space for at least one row of
-    # minimum-size badges, pulling top up if needed.
-    MIN_ZONE = 18 * 2 + 8   # min_r * 2 + padding — one row of smallest badges
+    # Guarantee at least one row of minimum-size badges
+    MIN_ZONE = 12 * 2 + 8
     if suit_bottom - top < MIN_ZONE:
         top = suit_bottom - MIN_ZONE
 
-    zone_h = suit_bottom - top
-    # Scale max badge radius to the available zone so _pack never drops a badge
-    # because it's too tall — it may make large donors smaller but nothing disappears.
-    adaptive_max_r = max(18, min(54, (zone_h - 6) // 2))
+    zone_h  = suit_bottom - top
+    zone_w  = PHOTO_W - 16          # 8px margin each side
+    n       = len(donors)
+    PAD     = 6
+
+    # Find the largest badge radius where ALL n donors fit in the zone.
+    # Iterate from 54 → 12 and stop at the first r where the required rows fit.
+    opt_max_r = 12
+    for r in range(54, 11, -1):
+        bpr    = max(1, (zone_w + PAD) // (2 * r + PAD))
+        rows   = math.ceil(n / bpr)
+        needed = rows * (2 * r + PAD) - PAD
+        if needed <= zone_h:
+            opt_max_r = r
+            break
+    opt_min_r = max(12, opt_max_r // 3)
 
     max_val = max(v for _, v in donors if v > 0) or 1
     sized = sorted(
-        [(n, v, _badge_radius(v, max_val, min_r=18, max_r=adaptive_max_r)) for n, v in donors],
+        [(dn, v, _badge_radius(v, max_val, min_r=opt_min_r, max_r=opt_max_r))
+         for dn, v in donors],
         key=lambda x: x[2], reverse=True,
     )
     placed = _pack(sized, 8, top, PHOTO_W - 8, suit_bottom)
