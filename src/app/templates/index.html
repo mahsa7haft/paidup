@@ -211,7 +211,7 @@
           <label for="prompt-select">Style:</label>
           <select id="prompt-select">
             {% for opt in prompt_options %}
-            <option value="{{ opt.key }}">{{ opt.label }} (v{{ opt.version }})</option>
+            <option value="{{ opt.key }}">{{ opt.label }}</option>
             {% endfor %}
           </select>
           <button class="analyse-btn" id="analyse-btn">Run</button>
