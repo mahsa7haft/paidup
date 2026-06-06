@@ -325,25 +325,43 @@ def _draw_company_initials_badge(draw: ImageDraw.ImageDraw,
         draw.text((cx, cy), val_str, fill=BADGE_TEXT, font=font_name, anchor="mm")
 
 
+def _person_silhouette(draw: ImageDraw.ImageDraw,
+                       head_cx: int, head_cy: int, head_r: int,
+                       color: str) -> None:
+    """
+    Head circle + cubic-bezier arch shoulders, replicating the SVG reference:
+      head circle at (head_cx, head_cy) r=head_r
+      arch: M x1 y_bot C x1 y_top x2 y_top x2 y_bot Z
+    Proportions taken directly from paidup_person_and_anonymous_logos.svg.
+    """
+    # Head
+    draw.ellipse([head_cx-head_r, head_cy-head_r,
+                  head_cx+head_r, head_cy+head_r], fill=color)
+    # Arch — proportions from SVG: arch_hw/head_r≈1.78, gap/head_r≈0.43, depth/head_r≈2.14
+    arch_hw = int(head_r * 1.78)
+    y_bot   = head_cy + head_r + int(head_r * 2.14)
+    y_top   = head_cy + head_r + int(head_r * 0.43)
+    x1, x2  = head_cx - arch_hw, head_cx + arch_hw
+    pts = []
+    for i in range(21):
+        t  = i / 20
+        # Cubic bezier: P0=(x1,y_bot) P1=(x1,y_top) P2=(x2,y_top) P3=(x2,y_bot)
+        bx = int(x1 * (1-t)**2 * (1 + 2*t) + x2 * t**2 * (3 - 2*t))
+        by = int(y_bot * ((1-t)**3 + t**3) + y_top * 3*t*(1-t))
+        pts.append((bx, by))
+    draw.polygon(pts, fill=color)
+
+
 def _draw_person_badge(draw: ImageDraw.ImageDraw,
                         cx: int, cy: int, r: int,
                         name: str, value: float,
                         font_val: ImageFont.FreeTypeFont,
                         font_name: ImageFont.FreeTypeFont) -> None:
-    """Dark green circle with person silhouette: head circle + shoulder dome."""
+    """Dark green circle with SVG-faithful head + bezier-arch shoulder silhouette."""
     draw.ellipse([cx-r, cy-r, cx+r, cy+r], fill=PERSON_FILL, outline=PERSON_RIM, width=2)
-    # Head
-    head_r = max(4, int(r * 0.25))
-    head_cy = cy - int(r * 0.25)
-    draw.ellipse([cx-head_r, head_cy-head_r, cx+head_r, head_cy+head_r], fill="white")
-    # Shoulders: chord(0, 180) = bottom half of ellipse = U-shaped dome.
-    # Flat top sits just below the head; dome curves downward.
-    # center_y of the bbox == flat_top, so: bbox = [flat_top - sh_h .. flat_top + sh_h].
-    gap = max(2, int(r * 0.06))
-    flat_top = head_cy + head_r + gap
-    sh_w = int(r * 0.65)
-    sh_h = int(r * 0.38)
-    draw.chord([cx - sh_w, flat_top - sh_h, cx + sh_w, flat_top + sh_h], 0, 180, fill="white")
+    head_r  = max(4, int(r * 0.25))
+    head_cy = cy - int(r * 0.27)
+    _person_silhouette(draw, cx, head_cy, head_r, "white")
 
 
 def _draw_anonymous_badge(draw: ImageDraw.ImageDraw,
@@ -351,17 +369,38 @@ def _draw_anonymous_badge(draw: ImageDraw.ImageDraw,
                           value: float,
                           font_val: ImageFont.FreeTypeFont,
                           font_name: ImageFont.FreeTypeFont) -> None:
-    """Dark grey circle with a large white question mark filling the badge."""
+    """
+    Dark grey circle replicating the anonymous SVG:
+    ghost figure (offset, faded) behind a foreground figure with '?' on the head.
+    """
     draw.ellipse([cx-r, cy-r, cx+r, cy+r], fill=ANON_FILL, outline=ANON_RIM, width=2)
-    # Load a font sized to fill the badge — ~1.3× radius so the glyph dominates.
-    qfont = font_val
+
+    head_r  = max(4, int(r * 0.25))
+    head_cy = cy - int(r * 0.27)
+
+    if r >= 26:
+        # Ghost figure: slightly smaller, offset right-and-up, mid-grey
+        g_hr = max(3, int(head_r * 0.80))
+        g_cx = cx + int(r * 0.14)
+        g_cy = head_cy - int(r * 0.06)
+        _person_silhouette(draw, g_cx, g_cy, g_hr, "#888888")
+        # Foreground shifted slightly left
+        fg_cx = cx - int(r * 0.07)
+    else:
+        fg_cx = cx
+
+    _person_silhouette(draw, fg_cx, head_cy, head_r, "#c8c8c8")
+
+    # '?' on foreground head — sized to fill the head circle
+    q_size = max(8, int(head_r * 1.3))
+    qfont  = font_name
     for path in ["/System/Library/Fonts/Helvetica.ttc", "/System/Library/Fonts/Arial.ttf"]:
         try:
-            qfont = ImageFont.truetype(path, max(12, int(r * 1.3)))
+            qfont = ImageFont.truetype(path, q_size)
             break
         except Exception:
             pass
-    draw.text((cx, cy), "?", fill="white", font=qfont, anchor="mm")
+    draw.text((fg_cx, head_cy), "?", fill=ANON_FILL, font=qfont, anchor="mm")
 
 
 
