@@ -5,6 +5,7 @@ The loader always picks the highest version for each key.
 Add ANTHROPIC_API_KEY to your .env to enable this feature.
 """
 
+import json
 import os
 import re
 from pathlib import Path
@@ -137,6 +138,54 @@ def analyze(
         messages=[{"role": "user", "content": user_message}],
     )
     return message.content[0].text
+
+
+_RESOLVE_SYSTEM = """\
+You are a UK political research assistant. Given a donor name from the UK Parliament
+Register of Members' Financial Interests, determine whether this person is the founder,
+owner, or controlling shareholder of a well-known company.
+
+Reply ONLY with a JSON object — no prose, no markdown fences:
+  {"company_name": "Sainsbury's", "domain": "sainsburys.co.uk"}
+or, if no clear corporate link exists:
+  {"company_name": null, "domain": null}
+
+Rules:
+- Only return a company if the association is well-established and publicly known.
+- Use the company's primary web domain (not a social media URL).
+- For supermarkets/retailers use the .co.uk domain if one exists.
+- If the name is clearly a company (Ltd, PLC, Trust, Foundation suffix) return null/null.
+- If uncertain, return null/null."""
+
+
+def resolve_person_to_company(donor_name: str) -> tuple[str | None, str | None]:
+    """
+    Ask Claude whether a donor name belongs to a known company owner/founder.
+    Returns (company_name, logo_domain) or (None, None).
+    Falls back to (None, None) on any error so the caller always gets a safe result.
+    """
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        return None, None
+    try:
+        client = anthropic.Anthropic(api_key=api_key)
+        msg = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=80,
+            system=_RESOLVE_SYSTEM,
+            messages=[{"role": "user", "content": donor_name}],
+        )
+        raw = msg.content[0].text.strip()
+        if not raw:
+            return None, None
+        # Strip accidental markdown fences if the model ignores instructions
+        raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw, flags=re.DOTALL).strip()
+        data = json.loads(raw)
+        return data.get("company_name"), data.get("domain")
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning("resolve_person_to_company failed: %s", exc)
+        return None, None
 
 
 def prompt_options() -> list[dict]:
