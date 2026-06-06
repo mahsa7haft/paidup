@@ -9,14 +9,34 @@ company owners via the donor_company_links DB table (seeded lazily by Claude).
 """
 
 import math
+import os
 import re
-import textwrap
 import requests
 from io import BytesIO
 from app import database as db
 from app.ai import resolve_person_to_company, resolve_company_domain
 from PIL import Image, ImageDraw, ImageFont
 from app.parliament import get_thumbnail_url
+
+# Drop PNG files here to override the coloured-pill party indicator.
+# Filename = party name slug (lowercase, spaces→hyphens). E.g. "labour.png".
+_PARTY_LOGOS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", "party_logos")
+_party_logo_cache: dict[str, "Image.Image | None"] = {}
+
+
+def _load_party_logo(party: str) -> "Image.Image | None":
+    slug = re.sub(r"[^a-z0-9]+", "-", party.lower()).strip("-")
+    if slug in _party_logo_cache:
+        return _party_logo_cache[slug]
+    path = os.path.join(_PARTY_LOGOS_DIR, f"{slug}.png")
+    if os.path.exists(path):
+        try:
+            _party_logo_cache[slug] = Image.open(path).convert("RGBA")
+            return _party_logo_cache[slug]
+        except Exception:
+            pass
+    _party_logo_cache[slug] = None
+    return None
 
 CARD_W, CARD_H = 900, 500
 PHOTO_W, PHOTO_H = 320, 480
@@ -344,26 +364,6 @@ def _draw_anonymous_badge(draw: ImageDraw.ImageDraw,
     draw.text((cx, cy), "?", fill="white", font=qfont, anchor="mm")
 
 
-def _draw_paidup_logo(draw: ImageDraw.ImageDraw,
-                      x: int, y: int,
-                      font_brand: ImageFont.FreeTypeFont,
-                      font_symbol: ImageFont.FreeTypeFont) -> None:
-    r = 14
-    cx, cy = x + r, y + r
-    # Circle (the lens)
-    draw.ellipse([cx-r, cy-r, cx+r, cy+r], fill=CREAM, outline=BRAND_GREEN, width=2)
-    draw.text((cx, cy), "£", fill=BRAND_GREEN, font=font_symbol, anchor="mm")
-    # Handle: starts at circle edge at 45°, extends ~75% of r further — matches SVG proportions
-    import math
-    angle = math.radians(45)
-    hx0 = cx + int(r * math.cos(angle))
-    hy0 = cy + int(r * math.sin(angle))
-    handle_len = int(r * 0.8)
-    hx1 = hx0 + int(handle_len * math.cos(angle))
-    hy1 = hy0 + int(handle_len * math.sin(angle))
-    draw.line([hx0, hy0, hx1, hy1], fill=BRAND_GREEN, width=3)
-    # Wordmark
-    draw.text((cx + r + 7, cy), "Paid Up", fill=BRAND_GREEN, font=font_brand, anchor="lm")
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -374,8 +374,8 @@ def generate_card(member_id: int, name: str, interests: list[dict],
     draw = ImageDraw.Draw(card)
 
     (font_name_lg, font_party, font_total, font_sub,
-     font_badge_val, font_badge_name, font_logo, font_logo_sym,
-     font_dim) = _fonts([22, 13, 32, 11, 12, 10, 13, 13, 9])
+     font_badge_val, font_badge_name,
+     font_dim) = _fonts([24, 14, 32, 13, 13, 11, 11])
 
     # ── Photo ──
     photo = _fetch_photo(member_id)
@@ -407,28 +407,45 @@ def generate_card(member_id: int, name: str, interests: list[dict],
             _draw_company_initials_badge(draw, cx, cy, r, dname, dval, fv, fn)
 
     # ── Right panel ──
-    rx, ry = PHOTO_W + 28, 22
-
-    _draw_paidup_logo(draw, rx, ry, font_logo, font_logo_sym)
-    ry += 42
+    rx, ry = PHOTO_W + 28, 30
 
     draw.text((rx, ry), name, fill=TEXT_DARK, font=font_name_lg)
-    ry += 28
+    ry += 34
 
     if party:
-        draw.text((rx, ry), party, fill=_party_colour(party), font=font_party)
-        ry += 22
+        logo_img = _load_party_logo(party)
+        if logo_img:
+            logo_h = 32
+            logo_w = int(logo_img.width * logo_h / logo_img.height)
+            scaled = logo_img.resize((logo_w, logo_h), Image.LANCZOS)
+            card_rgba = card.convert("RGBA")
+            card_rgba.paste(scaled, (rx, ry), scaled)
+            card = card_rgba.convert("RGB")
+            draw = ImageDraw.Draw(card)
+            ry += logo_h + 10
+        else:
+            # Coloured pill fallback until a logo file is added
+            colour = _party_colour(party)
+            bb = draw.textbbox((0, 0), party, font=font_party)
+            tw, th = bb[2] - bb[0], bb[3] - bb[1]
+            px, py = 10, 5
+            draw.rounded_rectangle(
+                [rx, ry, rx + tw + px * 2, ry + th + py * 2],
+                radius=5, fill=colour,
+            )
+            draw.text((rx + px, ry + py), party, fill="white", font=font_party)
+            ry += th + py * 2 + 10
 
-    ry += 8
+    ry += 6
 
     total = sum(i["value"] for i in interests)
     draw.text((rx, ry), f"£{round(total):,}", fill=TEXT_DARK, font=font_total)
-    ry += 38
+    ry += 42
     draw.text((rx, ry), "declared to Parliament", fill=TEXT_DIM, font=font_sub)
-    ry += 22
+    ry += 24
 
     draw.line([(rx, ry), (CARD_W - 24, ry)], fill=PANEL_LINE, width=1)
-    ry += 14
+    ry += 16
 
     all_donors  = _aggregate(interests)
     named_count = sum(1 for n, _ in all_donors if n != "Unknown")
@@ -437,10 +454,7 @@ def generate_card(member_id: int, name: str, interests: list[dict],
     if anon_count:
         count_str += f" + {anon_count} unattributed"
     draw.text((rx, ry), count_str, fill=TEXT_MID, font=font_sub)
-    ry += 16
+    ry += 20
     draw.text((rx, ry), "Badge size = total donated", fill=TEXT_DIM, font=font_dim)
-
-    draw.text((CARD_W - 16, CARD_H - 14), "paidup.app",
-              fill=TEXT_DIM, font=font_dim, anchor="ra")
 
     return card
