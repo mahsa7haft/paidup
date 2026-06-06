@@ -479,10 +479,12 @@ def _draw_anonymous_badge(draw: ImageDraw.ImageDraw,
                           cx: int, cy: int, r: int,
                           value: float,
                           font_val: ImageFont.FreeTypeFont,
-                          font_name: ImageFont.FreeTypeFont) -> None:
+                          font_name: ImageFont.FreeTypeFont,
+                          show_q: bool = True) -> None:
     """
-    No circle. Ghost figure (light grey, offset) behind a brand-green foreground
-    figure with a white '?' on the head — matching the anonymous SVG reference.
+    Ghost figure (light grey, offset) behind a brand-green foreground figure.
+    show_q=True  → white '?' on the head (unknown/unnamed payer).
+    show_q=False → no mark (named donor with no logo).
     """
     head_r  = max(4, int(r * 0.25))
     head_cy = cy - int(r * 0.27)
@@ -491,22 +493,23 @@ def _draw_anonymous_badge(draw: ImageDraw.ImageDraw,
         g_hr  = max(3, int(head_r * 0.80))
         g_cx  = cx + int(r * 0.14)
         g_cy  = head_cy - int(r * 0.06)
-        _person_silhouette(draw, g_cx, g_cy, g_hr, "#c0c0c0")  # ghost — no outline
+        _person_silhouette(draw, g_cx, g_cy, g_hr, "#c0c0c0")
         fg_cx = cx - int(r * 0.07)
     else:
         fg_cx = cx
 
     _person_silhouette(draw, fg_cx, head_cy, head_r, BRAND_GREEN, outline="white")
 
-    q_size = max(8, int(head_r * 1.3))
-    qfont  = font_name
-    for path in ["/System/Library/Fonts/Helvetica.ttc", "/System/Library/Fonts/Arial.ttf"]:
-        try:
-            qfont = ImageFont.truetype(path, q_size)
-            break
-        except Exception:
-            pass
-    draw.text((fg_cx, head_cy), "?", fill="white", font=qfont, anchor="mm")
+    if show_q:
+        q_size = max(8, int(head_r * 1.3))
+        qfont  = font_name
+        for path in ["/System/Library/Fonts/Helvetica.ttc", "/System/Library/Fonts/Arial.ttf"]:
+            try:
+                qfont = ImageFont.truetype(path, q_size)
+                break
+            except Exception:
+                pass
+        draw.text((fg_cx, head_cy), "?", fill="white", font=qfont, anchor="mm")
 
 
 
@@ -543,13 +546,14 @@ def generate_card(member_id: int, name: str, interests: list[dict],
         fv = font_badge_val if r >= 22 else font_badge_name
         fn = font_badge_name
         if badge_type == "anonymous":
-            _draw_anonymous_badge(draw, cx, cy, r, dval, fv, fn)
+            _draw_anonymous_badge(draw, cx, cy, r, dval, fv, fn, show_q=True)
         elif badge_type == "company_logo" and domain:
             _draw_company_logo_badge(card, draw, cx, cy, r, dname, dval, domain, fv, fn)
         elif badge_type == "person":
             _draw_person_badge(draw, cx, cy, r, dname, dval, fv, fn)
         else:
-            _draw_company_initials_badge(draw, cx, cy, r, dname, dval, fv, fn)
+            # Named donor with no logo — same silhouette as anonymous but no '?'
+            _draw_anonymous_badge(draw, cx, cy, r, dval, fv, fn, show_q=False)
 
     # ── Right panel ──
     rx, ry = PHOTO_W + 28, 30
