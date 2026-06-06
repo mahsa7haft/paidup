@@ -109,7 +109,9 @@ def parse_interests(interests: list[dict]) -> list[dict]:
     parsed = []
     for item in interests:
         fields = {f["name"]: f["value"] for f in item.get("fields", [])}
-        donor = fields.get("DonorName") or fields.get("DonorCompanyName")
+        donor = (fields.get("DonorName")
+                 or fields.get("DonorCompanyName")
+                 or fields.get("UltimatePayerName"))
         value = fields.get("Value") or fields.get("AmountOfDonation")
         category = item.get("category", {}).get("name", "Other")
         summary = item.get("summary", "")
