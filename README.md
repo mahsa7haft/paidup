@@ -6,11 +6,16 @@ Search any MP by name and instantly see their declared financial interests — d
 
 ## What it does
 
-1. You type an MP's name
-2. PaidUp fetches their declared financial interests from the UK Parliament API
-3. Generates a visual donor card showing who has paid them and how much
-4. Displays a full breakdown table of all declared interests
-5. AI analysis via Claude: plain English summary, investigative angle, donor profiles, factional analysis, and gap detection
+1. Search any MP by name
+2. PaidUp fetches their declared financial interests live from the UK Parliament API
+3. Generates a visual donor card — MP photo with sponsor-style badges on the suit, sized by donation amount
+4. Each badge adapts to who the donor is:
+   - **Company with logo** — real brand logo from Google Favicons
+   - **Company without logo** — dark circle with initials
+   - **Person** — cream name-tag card with readable name
+   - **Unattributed** — cream "ANON." stamp showing the combined total
+5. Displays a full breakdown table of all declared interests (unattributable entries shown as *Payer not named*)
+6. AI analysis via Claude: plain English summary, investigative angle, donor profiles, and gap detection — with an animated magnifying glass while the report generates
 
 ## Tech Stack
 
@@ -19,9 +24,13 @@ Search any MP by name and instantly see their declared financial interests — d
 | Data | UK Parliament Register of Interests API (free, official) |
 | Data | UK Parliament Members API (MP photos, biography, committees) |
 | Data | TheyWorkForYou API (voting record, rebellion stats, APPG roles) |
-| AI | Anthropic Claude API |
+| AI — analysis | Anthropic Claude Sonnet (analysis reports) |
+| AI — donor resolution | Anthropic Claude Haiku (company/person → domain lookup, ~$0.001/call) |
+| Logos | Google Favicons API (no auth, works for any domain) |
 | Image generation | Pillow |
 | Web framework | Flask |
+| Caching L1 | Redis (Parliament lookups 1h, AI results 24h) |
+| Caching L2 | PostgreSQL (AI results 28 days, donor links permanent) |
 | Package manager | uv |
 
 ## Data Sources
@@ -156,7 +165,7 @@ docker exec paidup-postgres psql -U paidup -d paidup \
 |---|---|
 | `donor_name` | Name as it appears in the Parliament register |
 | `company_name` | Display name of the linked company (if any) |
-| `logo_domain` | Domain passed to Clearbit for logo fetching — or `__person__` if the donor is a private individual with no company link |
+| `logo_domain` | Domain used to fetch a logo via Google Favicons — or `__person__` if confirmed to be a private individual with no company link |
 | `source` | `ai` (resolved by Claude Haiku) or `manual` (hand-corrected) |
 
 Manually correct a wrong domain:
@@ -321,28 +330,43 @@ Prompt files live in `src/app/prompts/` as plain text files. The naming conventi
 1. Duplicate an existing file and increment the version number, e.g. `summary_v2.txt`
 2. Edit the prompt freely
 3. Restart the app — it picks up the highest version automatically
-4. The dropdown in the UI shows the version number so you always know which variant ran
 
-No Python changes needed to iterate on prompts.
+Bumping the version number automatically busts both the Redis and Postgres caches, so Claude is always called fresh after a prompt edit. No Python changes needed to iterate on prompts.
 
 ## How It Works
 
 ```
 User types MP name
       ↓
-Parliament Members API → find MP ID, photo, party, constituency, committees
+Parliament Members API → MP ID, photo, party, constituency, committees
       ↓
-Parliament Interests API → fetch all declared financial interests
+Parliament Interests API → all declared financial interests
       ↓
-TheyWorkForYou API → voting record, rebellion stats, APPG roles (if key set)
+TheyWorkForYou API → voting record, rebellions, APPG roles (optional)
       ↓
-Parse and sort by value
+parse_interests() → resolve donor name from DonorName / DonorCompanyName
+                    / UltimatePayerName / PayerName (in that order)
       ↓
-Pillow composites MP photo + sponsor badges → donor card image
+deduplicate_donors() → TF-IDF cosine similarity clusters near-identical names
       ↓
-Claude API → AI analysis using selected prompt style
+For each donor → check donor_company_links DB (fuzzy match, threshold 0.75)
+                 → DB miss: ask Claude Haiku for company domain (~$0.001)
+                 → store result permanently
       ↓
-Flask returns card + breakdown table + slide-in analysis drawer
+Pillow card generation:
+  • Company with domain → Google Favicons logo inside dark circle
+  • Company no logo     → dark circle with 2-letter initials
+  • Person              → cream name-tag card (name readable, green header)
+  • Unattributed        → cream ANON. stamp badge (combined total)
+      ↓
+User clicks "Open Donor Analysis"
+      ↓
+/analyze → L1 Redis (24h) → L2 Postgres (28d) → Claude Sonnet (fresh call)
+         → animated magnifying glass + rotating phrases while generating
+      ↓
+Markdown report rendered in slide-in drawer
+      ↓
+Data Sources footer always visible at bottom of page
 ```
 
 ## Example Searches
@@ -351,6 +375,20 @@ Flask returns card + breakdown table + slide-in analysis drawer
 - `Rishi Sunak`
 - `Jeremy Corbyn`
 - `Boris Johnson`
+
+## Open Issues
+
+See the [GitHub Issues](https://github.com/mahsa7haft/paidup/issues) board for the full list. Current priorities:
+
+| # | Title |
+|---|---|
+| [#8](https://github.com/mahsa7haft/paidup/issues/8) | Party logos on card instead of party name text |
+| [#13](https://github.com/mahsa7haft/paidup/issues/13) | Cache generated card images in Cloudflare R2 |
+| [#16](https://github.com/mahsa7haft/paidup/issues/16) | Sticky search — keep search bar accessible while a card is open |
+| [#21](https://github.com/mahsa7haft/paidup/issues/21) | Move Open Donor Analysis button to the declared interests section |
+| [#24](https://github.com/mahsa7haft/paidup/issues/24) | Add Claude/Anthropic as a data source; AI reports should cite their sources |
+| [#25](https://github.com/mahsa7haft/paidup/issues/25) | Verify company logos render correctly on Railway (Google Favicons) |
+| [#26](https://github.com/mahsa7haft/paidup/issues/26) | Improve person badge readability at smaller sizes |
 
 ## Roadmap
 
