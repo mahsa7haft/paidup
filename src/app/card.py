@@ -344,17 +344,20 @@ def _layout_badges(interests: list[dict],
     n       = len(donors)
     PAD     = 6
 
-    # Find the largest badge radius where ALL n donors fit in the zone.
-    # Iterate from 54 → 12 and stop at the first r where the required rows fit.
-    opt_max_r = 12
-    for r in range(54, 11, -1):
+    # Find the largest badge radius that fits all n donors in the zone,
+    # but never go below MIN_R=18 — readability is more important than fitting
+    # every single badge. If even r=18 can't fit all, _pack will drop the overflow
+    # (better to show 8 readable badges than 12 tiny unreadable ones).
+    MIN_R = 18
+    opt_max_r = MIN_R
+    for r in range(54, MIN_R - 1, -1):
         bpr    = max(1, (zone_w + PAD) // (2 * r + PAD))
         rows   = math.ceil(n / bpr)
         needed = rows * (2 * r + PAD) - PAD
         if needed <= zone_h:
             opt_max_r = r
             break
-    opt_min_r = max(12, opt_max_r // 3)
+    opt_min_r = max(MIN_R, opt_max_r // 2)
 
     max_val = max(v for _, v in donors if v > 0) or 1
     sized = sorted(
