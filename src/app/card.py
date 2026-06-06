@@ -330,12 +330,28 @@ def _layout_badges(interests: list[dict],
     donors = _aggregate(interests)
     if not donors:
         return []
-    max_val = max(v for _, v in donors if v > 0) or 1
-    sized = sorted([(n, v, _badge_radius(v, max_val)) for n, v in donors],
-                   key=lambda x: x[2], reverse=True)
 
     top         = _suit_top(member_id, fitted_photo)
     suit_bottom = (CARD_H - PHOTO_H) // 2 + PHOTO_H - 8
+
+    # If face detection leaves very little room, let badges spill upward into the
+    # photo above suit_top — but never above the face itself (suit_top is the guard).
+    # We handle this by guaranteeing enough vertical space for at least one row of
+    # minimum-size badges, pulling top up if needed.
+    MIN_ZONE = 18 * 2 + 8   # min_r * 2 + padding — one row of smallest badges
+    if suit_bottom - top < MIN_ZONE:
+        top = suit_bottom - MIN_ZONE
+
+    zone_h = suit_bottom - top
+    # Scale max badge radius to the available zone so _pack never drops a badge
+    # because it's too tall — it may make large donors smaller but nothing disappears.
+    adaptive_max_r = max(18, min(54, (zone_h - 6) // 2))
+
+    max_val = max(v for _, v in donors if v > 0) or 1
+    sized = sorted(
+        [(n, v, _badge_radius(v, max_val, min_r=18, max_r=adaptive_max_r)) for n, v in donors],
+        key=lambda x: x[2], reverse=True,
+    )
     placed = _pack(sized, 8, top, PHOTO_W - 8, suit_bottom)
 
     # Shift all badges down so they sit at the bottom of the suit area.
@@ -409,16 +425,17 @@ def _draw_company_initials_badge(draw: ImageDraw.ImageDraw,
 
 def _person_silhouette(draw: ImageDraw.ImageDraw,
                        head_cx: int, head_cy: int, head_r: int,
-                       color: str) -> None:
+                       color: str, outline: str | None = None) -> None:
     """
-    Head circle + cubic-bezier arch shoulders, replicating the SVG reference:
-      head circle at (head_cx, head_cy) r=head_r
-      arch: M x1 y_bot C x1 y_top x2 y_top x2 y_bot Z
-    Proportions taken directly from paidup_person_and_anonymous_logos.svg.
+    Head circle + cubic-bezier arch shoulders, replicating the SVG reference.
+    Optional `outline` adds a 1px contrasting border — use "white" so the
+    silhouette reads on both dark and light suit fabrics.
     """
+    ow = 1 if outline else 0
     # Head
     draw.ellipse([head_cx-head_r, head_cy-head_r,
-                  head_cx+head_r, head_cy+head_r], fill=color)
+                  head_cx+head_r, head_cy+head_r],
+                 fill=color, outline=outline, width=ow)
     # Arch — proportions from SVG: arch_hw/head_r≈1.78, gap/head_r≈0.43, depth/head_r≈2.14
     arch_hw = int(head_r * 1.78)
     y_bot   = head_cy + head_r + int(head_r * 2.14)
@@ -427,11 +444,10 @@ def _person_silhouette(draw: ImageDraw.ImageDraw,
     pts = []
     for i in range(21):
         t  = i / 20
-        # Cubic bezier: P0=(x1,y_bot) P1=(x1,y_top) P2=(x2,y_top) P3=(x2,y_bot)
         bx = int(x1 * (1-t)**2 * (1 + 2*t) + x2 * t**2 * (3 - 2*t))
         by = int(y_bot * ((1-t)**3 + t**3) + y_top * 3*t*(1-t))
         pts.append((bx, by))
-    draw.polygon(pts, fill=color)
+    draw.polygon(pts, fill=color, outline=outline, width=ow)
 
 
 def _draw_person_badge(draw: ImageDraw.ImageDraw,
@@ -439,10 +455,10 @@ def _draw_person_badge(draw: ImageDraw.ImageDraw,
                         name: str, value: float,
                         font_val: ImageFont.FreeTypeFont,
                         font_name: ImageFont.FreeTypeFont) -> None:
-    """Brand-green person silhouette floating on the suit — no circle background."""
+    """Brand-green silhouette on the suit with white outline for contrast on dark fabric."""
     head_r  = max(4, int(r * 0.25))
     head_cy = cy - int(r * 0.27)
-    _person_silhouette(draw, cx, head_cy, head_r, BRAND_GREEN)
+    _person_silhouette(draw, cx, head_cy, head_r, BRAND_GREEN, outline="white")
 
 
 def _draw_anonymous_badge(draw: ImageDraw.ImageDraw,
@@ -458,18 +474,16 @@ def _draw_anonymous_badge(draw: ImageDraw.ImageDraw,
     head_cy = cy - int(r * 0.27)
 
     if r >= 26:
-        # Ghost: slightly smaller, shifted right-and-up
         g_hr  = max(3, int(head_r * 0.80))
         g_cx  = cx + int(r * 0.14)
         g_cy  = head_cy - int(r * 0.06)
-        _person_silhouette(draw, g_cx, g_cy, g_hr, "#c0c0c0")
+        _person_silhouette(draw, g_cx, g_cy, g_hr, "#c0c0c0")  # ghost — no outline
         fg_cx = cx - int(r * 0.07)
     else:
         fg_cx = cx
 
-    _person_silhouette(draw, fg_cx, head_cy, head_r, BRAND_GREEN)
+    _person_silhouette(draw, fg_cx, head_cy, head_r, BRAND_GREEN, outline="white")
 
-    # White '?' on the foreground head
     q_size = max(8, int(head_r * 1.3))
     qfont  = font_name
     for path in ["/System/Library/Fonts/Helvetica.ttc", "/System/Library/Fonts/Arial.ttf"]:
