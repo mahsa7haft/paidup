@@ -3,37 +3,15 @@ UK Parliament API client.
 Fetches MP details and financial interests from the official Parliament APIs.
 """
 
-import re
 import requests
+from app.text_utils import normalize_name, best_fuzzy_match
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
 MEMBERS_API = "https://members-api.parliament.uk/api"
 INTERESTS_API = "https://interests-api.parliament.uk/api/v1"
 
-# Legal / corporate suffixes stripped before comparison
-_SUFFIXES = re.compile(
-    r"\b(limited|ltd|plc|llp|lp|l\.p\.|corp|corporation|"
-    r"incorporated|inc|group|holdings|& co|and co|co)\b\.?",
-    re.IGNORECASE,
-)
-_THE = re.compile(r"^the\s+", re.IGNORECASE)
-_SPACE = re.compile(r"\s+")
-
-
-def _normalize(name: str) -> str:
-    """
-    Strip 'The' prefix and legal suffixes, collapse whitespace, lowercase.
-    Used only for comparison — the original name is kept as the displayed value.
-
-    Examples:
-      'The Arsenal Football Club Limited' → 'arsenal football club'
-      'Arsenal Football Club'            → 'arsenal football club'
-      'Pece and Justice Project'         → 'pece and justice project'
-    """
-    name = _THE.sub("", name.strip())
-    name = _SUFFIXES.sub("", name)
-    return _SPACE.sub(" ", name).strip().lower()
+_normalize = normalize_name
 
 
 def deduplicate_donors(interests: list[dict], threshold: float = 0.82) -> list[dict]:

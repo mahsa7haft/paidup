@@ -15,10 +15,14 @@ import os
 
 import psycopg2
 from psycopg2 import pool as pg_pool
+from app.text_utils import best_fuzzy_match
 
 log = logging.getLogger(__name__)
 
 ANALYSIS_MAX_AGE_DAYS = 28
+
+# Sentinel stored in logo_domain when AI confirmed no corporate link.
+NO_COMPANY = "__person__"
 
 _pool: pg_pool.SimpleConnectionPool | None = None
 
@@ -65,8 +69,17 @@ def ensure_tables() -> None:
                     PRIMARY KEY (member_id, prompt_key)
                 )
             """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS donor_company_links (
+                    donor_name   TEXT        NOT NULL PRIMARY KEY,
+                    company_name TEXT,
+                    logo_domain  TEXT,
+                    source       VARCHAR(20) NOT NULL DEFAULT 'ai',
+                    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+            """)
         conn.commit()
-        log.info("DB: analyses table ready")
+        log.info("DB: analyses + donor_company_links tables ready")
     except Exception as exc:
         log.warning("DB ensure_tables failed: %s", exc)
         conn.rollback()
@@ -101,6 +114,94 @@ def get_analysis(member_id: int, prompt_key: str, prompt_version: int) -> str | 
     except Exception as exc:
         log.warning("DB get_analysis failed: %s", exc)
         return None
+    finally:
+        p.putconn(conn)
+
+
+def get_donor_company_link(donor_name: str) -> dict | None:
+    """
+    Return the stored link for a donor name, or None if not yet resolved.
+
+    Lookup order:
+      1. Exact match on donor_name.
+      2. Fuzzy match using TF-IDF cosine similarity against all stored names
+         (handles misspellings and minor variants — same algorithm as deduplicate_donors).
+
+    Returned dict has keys: company_name (str|None), logo_domain (str|None), source (str).
+    logo_domain == NO_COMPANY means AI confirmed this is just a person, no corporate link.
+    """
+    p = _get_pool()
+    if not p:
+        return None
+    conn = None
+    try:
+        conn = p.getconn()
+        with conn.cursor() as cur:
+            # 1. Exact match
+            cur.execute(
+                "SELECT company_name, logo_domain, source FROM donor_company_links WHERE donor_name = %s",
+                (donor_name,),
+            )
+            row = cur.fetchone()
+            if row:
+                return {"company_name": row[0], "logo_domain": row[1], "source": row[2]}
+
+            # 2. Fuzzy match — load all stored names and find closest
+            cur.execute("SELECT donor_name, company_name, logo_domain, source FROM donor_company_links")
+            all_rows = cur.fetchall()
+
+        if not all_rows:
+            return None
+
+        stored_names = [r[0] for r in all_rows]
+        matched = best_fuzzy_match(donor_name, stored_names, threshold=0.75)
+        if matched:
+            for r in all_rows:
+                if r[0] == matched:
+                    return {"company_name": r[1], "logo_domain": r[2], "source": r[3]}
+
+        return None
+    except Exception as exc:
+        log.warning("DB get_donor_company_link failed: %s", exc)
+        return None
+    finally:
+        if conn is not None:
+            p.putconn(conn)
+
+
+def save_donor_company_link(
+    donor_name: str,
+    company_name: str | None,
+    logo_domain: str | None,
+    source: str = "ai",
+) -> None:
+    """
+    Upsert a donor→company mapping.  Pass logo_domain=NO_COMPANY to record that
+    this person has no known corporate association (prevents repeated AI lookups).
+    source should be 'ai' or 'manual'.
+    """
+    p = _get_pool()
+    if not p:
+        return
+    conn = p.getconn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO donor_company_links (donor_name, company_name, logo_domain, source)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (donor_name) DO UPDATE
+                    SET company_name = EXCLUDED.company_name,
+                        logo_domain  = EXCLUDED.logo_domain,
+                        source       = EXCLUDED.source,
+                        created_at   = NOW()
+                """,
+                (donor_name, company_name, logo_domain, source),
+            )
+        conn.commit()
+    except Exception as exc:
+        log.warning("DB save_donor_company_link failed: %s", exc)
+        conn.rollback()
     finally:
         p.putconn(conn)
 
