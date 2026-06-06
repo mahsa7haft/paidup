@@ -12,7 +12,7 @@ from app.parliament import (
     search_mp, get_interests, get_biography,
     parse_interests, date_range, parse_biography, deduplicate_donors,
 )
-from app.card import generate_card
+from app.card import generate_card, get_badge_layout
 from app.ai import analyze, prompt_options, get_prompt_version
 from app.theyworkforyou import get_mp_data as get_twfy_data
 import app.cache as cache
@@ -151,6 +151,12 @@ def card(member_id):
     img.save(buf, format="PNG")
     buf.seek(0)
     return send_file(buf, mimetype="image/png")
+
+
+@app.route("/card/<int:member_id>/badges")
+def card_badges(member_id):
+    interests = deduplicate_donors(parse_interests(get_interests(member_id)))
+    return jsonify(get_badge_layout(interests))
 
 
 @app.route("/health")

@@ -219,8 +219,7 @@ def _pack(badges: list[tuple[str, float, int]],
     placed: list[tuple[int, int, int, str, float]] = []
     row_x, row_y, row_h = x0, y0, 0
     for name, value, r in badges:
-        bw = r * 2 if not _is_person(name) else int(r * 2.2)
-        bh = r * 2 if not _is_person(name) else int(r * 2.0)
+        bw = bh = r * 2
         if row_x + bw > x1:
             row_y += row_h + PAD
             row_x = x0
@@ -231,6 +230,41 @@ def _pack(badges: list[tuple[str, float, int]],
         row_x += bw + PAD
         row_h = max(row_h, bh)
     return placed
+
+
+def _layout_badges(interests: list[dict]) -> list[dict]:
+    """
+    Compute badge positions and classifications using the same algorithm as
+    generate_card. Separating this lets the /badges endpoint return positions
+    without re-rendering the PNG.
+    """
+    donors = _aggregate(interests)
+    if not donors:
+        return []
+    max_val = max(v for _, v in donors if v > 0) or 1
+    sized = sorted([(n, v, _badge_radius(v, max_val)) for n, v in donors],
+                   key=lambda x: x[2], reverse=True)
+
+    photo_y = (CARD_H - PHOTO_H) // 2
+    suit_top    = photo_y + int(PHOTO_H * 0.62)
+    suit_bottom = photo_y + PHOTO_H - 8
+    placed = _pack(sized, 8, suit_top, PHOTO_W - 8, suit_bottom)
+
+    result = []
+    for cx, cy, r, dname, dval in placed:
+        if dname == "Unknown":
+            result.append({"cx": cx, "cy": cy, "r": r, "name": dname,
+                           "value": dval, "badge_type": "anonymous", "domain": None})
+        else:
+            badge_type, domain = _classify_donor(dname)
+            result.append({"cx": cx, "cy": cy, "r": r, "name": dname,
+                           "value": dval, "badge_type": badge_type, "domain": domain})
+    return result
+
+
+def get_badge_layout(interests: list[dict]) -> dict:
+    """Return card dimensions + badge positions for the /badges endpoint."""
+    return {"card_w": CARD_W, "card_h": CARD_H, "badges": _layout_badges(interests)}
 
 
 # ── Badge drawing ─────────────────────────────────────────────────────────────
@@ -283,50 +317,19 @@ def _draw_person_badge(draw: ImageDraw.ImageDraw,
                         name: str, value: float,
                         font_val: ImageFont.FreeTypeFont,
                         font_name: ImageFont.FreeTypeFont) -> None:
-    """Name-tag style: cream card, green border, large readable name, amount in green."""
-    bw = int(r * 2.4)
-    bh = int(r * 2.0)
-    bx0, by0 = cx - bw // 2, cy - bh // 2
-    bx1, by1 = cx + bw // 2, cy + bh // 2
-    rad = max(4, r // 6)
-
-    # Shadow
-    draw.rounded_rectangle([bx0+2, by0+2, bx1+2, by1+2], radius=rad, fill="#00000030")
-    # Cream card body with green border
-    draw.rounded_rectangle([bx0, by0, bx1, by1], radius=rad, fill=CREAM, outline=PERSON_RIM, width=2)
-    # Thin green header strip
-    strip_h = max(10, r // 4)
-    draw.rounded_rectangle([bx0, by0, bx1, by0 + strip_h + rad], radius=rad, fill=PERSON_RIM)
-    draw.rectangle([bx0, by0 + strip_h, bx1, by0 + strip_h + rad], fill=PERSON_RIM)
-    draw.rectangle([bx0 + 2, by0 + strip_h + rad, bx1 - 2, by0 + strip_h + rad + 1], fill=CREAM)
-
-    # Strip dot decoration
-    dot_r = max(2, strip_h // 3)
-    draw.ellipse([cx - dot_r, by0 + strip_h // 2 - dot_r,
-                  cx + dot_r, by0 + strip_h // 2 + dot_r], fill=CREAM)
-
-    title_words = {"mr", "mrs", "ms", "miss", "dr", "prof", "lord", "lady",
-                   "sir", "dame", "baroness", "baron", "earl", "viscount", "the", "rt", "hon"}
-    display_parts = [p for p in name.split() if p.lower() not in title_words] or name.split()
-
-    if r >= 28:
-        line1 = " ".join(display_parts[:2])
-        line2 = " ".join(display_parts[2:]) if len(display_parts) > 2 else ""
-        content_cy = by0 + strip_h + (bh - strip_h) // 2
-        if line2:
-            draw.text((cx, content_cy - 14), line1, fill=TEXT_DARK, font=font_name, anchor="mm")
-            draw.text((cx, content_cy),       line2, fill=TEXT_DARK, font=font_name, anchor="mm")
-            draw.text((cx, content_cy + 14),  _fmt(value), fill=PERSON_RIM, font=font_name, anchor="mm")
-        else:
-            draw.text((cx, content_cy - 8),  line1, fill=TEXT_DARK, font=font_val, anchor="mm")
-            draw.text((cx, content_cy + 10), _fmt(value), fill=PERSON_RIM, font=font_name, anchor="mm")
-    elif r >= 20:
-        surname = display_parts[-1] if display_parts else name
-        content_cy = by0 + strip_h + (bh - strip_h) // 2
-        draw.text((cx, content_cy - 7),  surname,      fill=TEXT_DARK, font=font_name, anchor="mm")
-        draw.text((cx, content_cy + 7),  _fmt(value),  fill=PERSON_RIM, font=font_name, anchor="mm")
-    else:
-        draw.text((cx, cy), _fmt(value), fill=TEXT_DARK, font=font_name, anchor="mm")
+    """Clean circle with white person silhouette — name/value come from hover tooltip."""
+    # Drop shadow + badge circle
+    draw.ellipse([cx-r+2, cy-r+2, cx+r+2, cy+r+2], fill="#00000040")
+    draw.ellipse([cx-r, cy-r, cx+r, cy+r], fill=PERSON_FILL, outline=PERSON_RIM, width=2)
+    # Head
+    head_r = max(3, int(r * 0.2))
+    head_cy = cy - int(r * 0.3)
+    draw.ellipse([cx-head_r, head_cy-head_r, cx+head_r, head_cy+head_r], fill="white")
+    # Shoulders / body
+    sh_w = int(r * 0.7)
+    sh_h = int(r * 0.4)
+    sh_cy = cy + int(r * 0.25)
+    draw.ellipse([cx-sh_w, sh_cy-sh_h, cx+sh_w, sh_cy+sh_h], fill="white")
 
 
 def _draw_anonymous_badge(draw: ImageDraw.ImageDraw,
@@ -400,28 +403,21 @@ def generate_card(member_id: int, name: str, interests: list[dict],
     draw.line([(PHOTO_W, 0), (PHOTO_W, CARD_H)], fill=PANEL_LINE, width=1)
 
     # ── Badges on suit ──
-    donors = _aggregate(interests)
-    if donors:
-        max_val = max(v for _, v in donors if v > 0) or 1
-        sized = sorted([(n, v, _badge_radius(v, max_val)) for n, v in donors],
-                       key=lambda x: x[2], reverse=True)
-        suit_top    = photo_y + int(PHOTO_H * 0.62)
-        suit_bottom = photo_y + PHOTO_H - 8
-        placed = _pack(sized, photo_x + 8, suit_top, photo_x + PHOTO_W - 8, suit_bottom)
-
-        for cx, cy, r, dname, dval in placed:
-            fv = font_badge_val if r >= 22 else font_badge_name
-            fn = font_badge_name
-            if dname == "Unknown":
-                _draw_anonymous_badge(draw, cx, cy, r, dval, fv, fn)
-                continue
-            badge_type, domain = _classify_donor(dname)
-            if badge_type == "company_logo" and domain:
-                _draw_company_logo_badge(card, draw, cx, cy, r, dname, dval, domain, fv, fn)
-            elif badge_type == "person":
-                _draw_person_badge(draw, cx, cy, r, dname, dval, fv, fn)
-            else:
-                _draw_company_initials_badge(draw, cx, cy, r, dname, dval, fv, fn)
+    layout = _layout_badges(interests)
+    for badge in layout:
+        cx, cy, r = badge["cx"], badge["cy"], badge["r"]
+        dname, dval = badge["name"], badge["value"]
+        badge_type, domain = badge["badge_type"], badge["domain"]
+        fv = font_badge_val if r >= 22 else font_badge_name
+        fn = font_badge_name
+        if badge_type == "anonymous":
+            _draw_anonymous_badge(draw, cx, cy, r, dval, fv, fn)
+        elif badge_type == "company_logo" and domain:
+            _draw_company_logo_badge(card, draw, cx, cy, r, dname, dval, domain, fv, fn)
+        elif badge_type == "person":
+            _draw_person_badge(draw, cx, cy, r, dname, dval, fv, fn)
+        else:
+            _draw_company_initials_badge(draw, cx, cy, r, dname, dval, fv, fn)
 
     # ── Right panel ──
     rx, ry = PHOTO_W + 28, 22
@@ -447,8 +443,9 @@ def generate_card(member_id: int, name: str, interests: list[dict],
     draw.line([(rx, ry), (CARD_W - 24, ry)], fill=PANEL_LINE, width=1)
     ry += 14
 
-    named_count = sum(1 for n, _ in donors if n != "Unknown")
-    anon_count  = sum(1 for n, _ in donors if n == "Unknown")
+    all_donors  = _aggregate(interests)
+    named_count = sum(1 for n, _ in all_donors if n != "Unknown")
+    anon_count  = sum(1 for n, _ in all_donors if n == "Unknown")
     count_str = f"{named_count} declared donor{'' if named_count == 1 else 's'}"
     if anon_count:
         count_str += f" + {anon_count} unattributed"
