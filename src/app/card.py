@@ -310,17 +310,17 @@ def _draw_person_badge(draw: ImageDraw.ImageDraw,
                         name: str, value: float,
                         font_val: ImageFont.FreeTypeFont,
                         font_name: ImageFont.FreeTypeFont) -> None:
-    """Clean circle with white person silhouette — name/value come from hover tooltip."""
+    """Dark green circle with classic two-circle person silhouette (head + body)."""
     draw.ellipse([cx-r, cy-r, cx+r, cy+r], fill=PERSON_FILL, outline=PERSON_RIM, width=2)
-    # Head
+    # Head — sized and positioned to stay inside the badge circle
     head_r = max(4, int(r * 0.27))
     head_cy = cy - int(r * 0.28)
     draw.ellipse([cx-head_r, head_cy-head_r, cx+head_r, head_cy+head_r], fill="white")
-    # Shoulders: top half of a wide ellipse (chord = filled arc from 180°→360° clockwise)
-    sh_w = int(r * 0.68)
-    sh_h = int(r * 0.5)
-    sh_cy = cy + int(r * 0.42)
-    draw.chord([cx-sh_w, sh_cy-sh_h, cx+sh_w, sh_cy+sh_h], 180, 360, fill="white")
+    # Body — a larger circle below; both circles together read as a person icon.
+    # Centred at (cx, cy + 0.36r) with radius 0.38r — corners stay within badge (√(0.38²+0.36²) ≈ 0.52 < 1).
+    body_r = int(r * 0.38)
+    body_cy = cy + int(r * 0.36)
+    draw.ellipse([cx-body_r, body_cy-body_r, cx+body_r, body_cy+body_r], fill="white")
 
 
 def _draw_anonymous_badge(draw: ImageDraw.ImageDraw,
@@ -328,22 +328,10 @@ def _draw_anonymous_badge(draw: ImageDraw.ImageDraw,
                           value: float,
                           font_val: ImageFont.FreeTypeFont,
                           font_name: ImageFont.FreeTypeFont) -> None:
-    """Stamp-style badge for entries where the payer is not named in the register."""
-    bw = int(r * 2.4)
-    bh = int(r * 1.8)
-    bx0, by0 = cx - bw // 2, cy - bh // 2
-    bx1, by1 = cx + bw // 2, cy + bh // 2
-    rad = max(4, r // 6)
-    # Cream card, dashed grey border effect (solid with inner lighter rect)
-    draw.rounded_rectangle([bx0, by0, bx1, by1], radius=rad, fill=CREAM, outline=ANON_RIM, width=2)
-    draw.rounded_rectangle([bx0+4, by0+4, bx1-4, by1-4], radius=max(2, rad-2),
-                            fill=None, outline="#cccccc", width=1)
-    if r >= 28:
-        draw.text((cx, cy - r // 5 - 2), "ANON.", fill=ANON_RIM, font=font_name, anchor="mm")
-        draw.text((cx, cy + r // 4),     _fmt(value), fill=ANON_FILL, font=font_val, anchor="mm")
-    else:
-        draw.text((cx, cy - 6), "?",         fill=ANON_RIM, font=font_name, anchor="mm")
-        draw.text((cx, cy + 6), _fmt(value), fill=ANON_FILL, font=font_name, anchor="mm")
+    """Dark grey circle with a white question mark — unknown/unnamed payer."""
+    draw.ellipse([cx-r, cy-r, cx+r, cy+r], fill=ANON_FILL, outline=ANON_RIM, width=2)
+    font = font_val if r >= 22 else font_name
+    draw.text((cx, cy), "?", fill="white", font=font, anchor="mm")
 
 
 def _draw_paidup_logo(draw: ImageDraw.ImageDraw,
