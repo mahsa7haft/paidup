@@ -19,6 +19,8 @@ _TITLES = re.compile(
     r"baroness|baron|earl|viscount|the)\s+",
     re.IGNORECASE,
 )
+# Territorial designations appended to UK peerages: "of Turville", "of Preston" etc.
+_TERRITORIAL = re.compile(r"\s+of\s+\w+$", re.IGNORECASE)
 _SPACE = re.compile(r"\s+")
 
 
@@ -28,11 +30,13 @@ def normalize_name(name: str) -> str:
     Used for comparison only — original name is always preserved for display.
 
     Examples:
-      'The Arsenal Football Club Limited' → 'arsenal football club'
-      'Lord David Sainsbury'             → 'david sainsbury'
-      'Arsenal Football Club'            → 'arsenal football club'
+      'The Arsenal Football Club Limited'      → 'arsenal football club'
+      'Lord David Sainsbury'                   → 'david sainsbury'
+      'Lord David Sainsbury of Turville'       → 'david sainsbury'
+      'Arsenal Football Club'                  → 'arsenal football club'
     """
     name = _TITLES.sub("", name.strip())
+    name = _TERRITORIAL.sub("", name)   # strip " of Turville" etc. after title removal
     name = _SUFFIXES.sub("", name)
     return _SPACE.sub(" ", name).strip().lower()
 

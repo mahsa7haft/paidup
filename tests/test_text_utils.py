@@ -20,6 +20,10 @@ class TestNormalizeName:
         assert normalize_name("Dame Judi Dench") == "judi dench"
         assert normalize_name("Mr John Smith") == "john smith"
 
+    def test_strips_territorial_designation(self):
+        assert normalize_name("Lord David Sainsbury of Turville") == "david sainsbury"
+        assert normalize_name("Baroness Thatcher of Kesteven") == "thatcher"
+
     def test_collapses_whitespace(self):
         assert normalize_name("  Arsenal   FC  ") == "arsenal fc"
 
