@@ -289,8 +289,19 @@ def _draw_paidup_logo(draw: ImageDraw.ImageDraw,
                       font_symbol: ImageFont.FreeTypeFont) -> None:
     r = 14
     cx, cy = x + r, y + r
+    # Circle (the lens)
     draw.ellipse([cx-r, cy-r, cx+r, cy+r], fill=CREAM, outline=BRAND_GREEN, width=2)
     draw.text((cx, cy), "£", fill=BRAND_GREEN, font=font_symbol, anchor="mm")
+    # Handle: starts at circle edge at 45°, extends ~75% of r further — matches SVG proportions
+    import math
+    angle = math.radians(45)
+    hx0 = cx + int(r * math.cos(angle))
+    hy0 = cy + int(r * math.sin(angle))
+    handle_len = int(r * 0.8)
+    hx1 = hx0 + int(handle_len * math.cos(angle))
+    hy1 = hy0 + int(handle_len * math.sin(angle))
+    draw.line([hx0, hy0, hx1, hy1], fill=BRAND_GREEN, width=3)
+    # Wordmark
     draw.text((cx + r + 7, cy), "Paid Up", fill=BRAND_GREEN, font=font_brand, anchor="lm")
 
 
