@@ -108,6 +108,18 @@
       background: #fff; border: 1px solid #e8e0d4; border-radius: 8px; padding: 1rem 1.2rem; min-height: 60px;
     }
     #drawer-ai-result.loading { min-height: 60px; display: flex; align-items: center; }
+    .loading-inner { display: flex; align-items: center; gap: 0.75rem; }
+    .loading-glass {
+      flex-shrink: 0;
+      animation: glassZoom 2.2s ease-in-out infinite;
+      transform-origin: 40% 40%;
+    }
+    @keyframes glassZoom {
+      0%   { transform: scale(1);    }
+      30%  { transform: scale(1.45); }
+      60%  { transform: scale(0.8);  }
+      100% { transform: scale(1);    }
+    }
     .loading-phrase {
       color: #888; font-style: italic; font-size: 0.9rem;
       animation: phraseIn 0.5s ease;
@@ -414,8 +426,12 @@
         'Auditing the donations…',
       ];
       let phraseIdx = 0;
+      const glassSvg = `<svg class="loading-glass" width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="11" cy="11" r="7.5" stroke="#1D9E75" stroke-width="2.2"/>
+        <line x1="16.8" y1="16.8" x2="24" y2="24" stroke="#1D9E75" stroke-width="2.5" stroke-linecap="round"/>
+      </svg>`;
       const showPhrase = () => {
-        aiResult.innerHTML = `<span class="loading-phrase">${phrases[phraseIdx % phrases.length]}</span>`;
+        aiResult.innerHTML = `<span class="loading-inner">${glassSvg}<span class="loading-phrase">${phrases[phraseIdx % phrases.length]}</span></span>`;
         phraseIdx++;
       };
       showPhrase();
