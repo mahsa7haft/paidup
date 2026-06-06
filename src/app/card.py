@@ -240,16 +240,20 @@ def _draw_company_logo_badge(img: Image.Image, draw: ImageDraw.ImageDraw,
                               name: str, value: float, domain: str,
                               font_val: ImageFont.FreeTypeFont,
                               font_name: ImageFont.FreeTypeFont) -> None:
-    draw.ellipse([cx-r+2, cy-r+2, cx+r+2, cy+r+2], fill="#00000040")
-    draw.ellipse([cx-r, cy-r, cx+r, cy+r], fill=COMPANY_FILL, outline=COMPANY_RIM, width=2)
     logo = _fetch_logo(domain)
     if logo:
-        # Logo occupies the top ~60% of the circle; value sits in the bottom quarter
-        logo_size = int(r * 1.2)
+        # Logo floats directly on the suit — no circle — sized to donation amount.
+        # Soft shadow behind the logo for legibility against any background.
+        logo_size = r * 2
         logo = logo.resize((logo_size, logo_size), Image.LANCZOS)
-        img.paste(logo, (cx - logo_size // 2, cy - logo_size // 2 - r // 6), logo)
-        draw.text((cx, cy + r // 3), _fmt(value), fill=BADGE_VAL, font=font_val, anchor="mm")
+        shadow = Image.new("RGBA", (logo_size + 6, logo_size + 6), (0, 0, 0, 0))
+        shadow.paste((0, 0, 0, 60), [0, 0, logo_size + 6, logo_size + 6])
+        img.paste(shadow, (cx - logo_size // 2 + 3, cy - logo_size // 2 + 3), shadow)
+        img.paste(logo, (cx - logo_size // 2, cy - logo_size // 2), logo)
     else:
+        # No logo — plain circle with initials
+        draw.ellipse([cx-r+2, cy-r+2, cx+r+2, cy+r+2], fill="#00000040")
+        draw.ellipse([cx-r, cy-r, cx+r, cy+r], fill=COMPANY_FILL, outline=COMPANY_RIM, width=2)
         inits = _initials(name)
         draw.text((cx, cy - r // 4), inits, fill=BADGE_TEXT, font=font_val, anchor="mm")
         draw.text((cx, cy + r // 4 + 2), _fmt(value), fill=BADGE_VAL, font=font_val, anchor="mm")
