@@ -162,6 +162,16 @@
     .stat-box .sb-val { font-size: 1.3rem; font-weight: 700; color: #1D9E75; }
     .stat-box .sb-label { font-size: 0.72rem; color: #888; margin-top: 0.1rem; }
 
+    /* Card loading placeholder */
+    .card-loading {
+      display: none; width: 100%; aspect-ratio: 900 / 500;
+      background: #f0ebe0; border: 1px solid #d8d0c4; border-bottom: none;
+      border-radius: 10px 10px 0 0;
+      flex-direction: column; align-items: center; justify-content: center; gap: 0.75rem;
+    }
+    .card-loading.active { display: flex; }
+    .card-loading-phrase { color: #888; font-style: italic; font-size: 0.9rem; animation: phraseIn 0.5s ease; }
+
     /* Card overlay + badge hotspots + tooltip */
     .card-wrap { position: relative; width: 100%; max-width: 800px; display: block; }
     .badge-overlay { position: absolute; inset: 0; pointer-events: none; border-radius: 10px 10px 0 0; overflow: hidden; }
@@ -233,7 +243,14 @@
     <div class="tag-row" id="mp-tags"></div>
 
     <div class="card-wrap" id="card-wrap">
-      <img id="card-img" class="card-img" src="" alt="Donor card" />
+      <div class="card-loading" id="card-loading">
+        <svg class="loading-glass" width="36" height="36" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="11" cy="11" r="7.5" stroke="#1D9E75" stroke-width="2.2"/>
+          <line x1="16.8" y1="16.8" x2="24" y2="24" stroke="#1D9E75" stroke-width="2.5" stroke-linecap="round"/>
+        </svg>
+        <span class="card-loading-phrase" id="card-loading-phrase">Generating card…</span>
+      </div>
+      <img id="card-img" class="card-img" src="" alt="Donor card" style="display:none" />
       <div class="badge-overlay" id="badge-overlay"></div>
     </div>
 
@@ -383,6 +400,39 @@
 
     window.addEventListener('resize', _renderOverlay);
 
+    // ── Card image loading state ──────────────────────────────────────────────
+    const _cardPhrases = [
+      'Fetching donor data…',
+      'Locating MP photo…',
+      'Detecting face position…',
+      'Resolving company logos…',
+      'Sizing donor badges…',
+      'Drawing the card…',
+      'Almost ready…',
+    ];
+    let _cardPhraseTimer = null;
+
+    function _startCardLoading() {
+      const phraseEl = document.getElementById('card-loading-phrase');
+      document.getElementById('card-loading').classList.add('active');
+      document.getElementById('card-img').style.display = 'none';
+      let idx = 0;
+      phraseEl.textContent = _cardPhrases[0];
+      _cardPhraseTimer = setInterval(() => {
+        idx = (idx + 1) % _cardPhrases.length;
+        phraseEl.style.animation = 'none';
+        phraseEl.offsetHeight;  // force reflow to restart animation
+        phraseEl.style.animation = '';
+        phraseEl.textContent = _cardPhrases[idx];
+      }, 2000);
+    }
+
+    function _stopCardLoading() {
+      if (_cardPhraseTimer) { clearInterval(_cardPhraseTimer); _cardPhraseTimer = null; }
+      document.getElementById('card-loading').classList.remove('active');
+      document.getElementById('card-img').style.display = '';
+    }
+
     async function lookup() {
       const name = input.value.trim();
       if (!name) return;
@@ -426,13 +476,15 @@
       (data.opposition_posts || []).forEach(p => addTag(p, 'govt'));
       (data.committees || []).slice(0, 4).forEach(c => addTag(c));
 
-      // Reset overlay state for new MP
+      // Reset overlay + start card loading animation
       _badgeLayout = null;
       _cardImgReady = false;
       document.getElementById('badge-overlay').innerHTML = '';
+      _startCardLoading();
 
       const cardImg = document.getElementById('card-img');
-      cardImg.onload = () => { _cardImgReady = true; _renderOverlay(); };
+      cardImg.onload  = () => { _stopCardLoading(); _cardImgReady = true; _renderOverlay(); };
+      cardImg.onerror = () => { _stopCardLoading(); };
 
       const party = encodeURIComponent(data.party || '');
       cardImg.src = `/card/${data.id}?name=${encodeURIComponent(data.name)}&party=${party}`;
