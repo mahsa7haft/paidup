@@ -103,10 +103,12 @@
     .analyse-btn:hover { background: #178a64; }
     .analyse-btn:disabled { opacity: 0.5; cursor: wait; }
     #drawer-ai-result {
+      display: none; /* hidden until loading or result */
       line-height: 1.75; font-size: 0.9rem; color: #333;
-      background: #fff; border: 1px solid #e8e0d4; border-radius: 8px; padding: 1rem 1.2rem; min-height: 60px;
+      background: #fff; border: 1px solid #e8e0d4; border-radius: 8px; padding: 1rem 1.2rem;
     }
-    #drawer-ai-result.loading { min-height: 60px; display: flex; align-items: center; }
+    #drawer-ai-result.loading    { display: flex; align-items: center; min-height: 60px; }
+    #drawer-ai-result.has-result { display: block; }
     .loading-inner { display: flex; align-items: center; gap: 0.75rem; }
     .loading-glass {
       flex-shrink: 0;
@@ -525,7 +527,9 @@
       if (!currentMp) return;
       document.getElementById('drawer-title').textContent = `${currentMp.name} — Donor Analysis`;
       renderTwfy(currentMp.twfy);
-      document.getElementById('drawer-ai-result').innerHTML = '';
+      const _aiResult = document.getElementById('drawer-ai-result');
+      _aiResult.innerHTML = '';
+      _aiResult.className = '';   // hidden — no empty box
       document.getElementById('drawer-ai-error').textContent = '';
       drawer.classList.add('open');
       overlay.classList.add('open');
@@ -590,7 +594,7 @@
       const aiError = document.getElementById('drawer-ai-error');
       analyseBtn.disabled = true;
       aiError.textContent = '';
-      aiResult.className = 'loading';
+      aiResult.className = 'loading';  // shows box with loading animation
 
       const phrases = [
         'Scrutinising the register…',
@@ -634,10 +638,11 @@
         if (!res.ok) throw new Error(data.error || 'Analysis failed');
         clearInterval(phraseTimer);
         aiResult.innerHTML = marked.parse(data.result);
-        aiResult.className = '';
+        aiResult.className = 'has-result';  // shows box with content
       } catch (e) {
         clearInterval(phraseTimer);
         aiResult.innerHTML = '';
+        aiResult.className = '';            // hide box on error
         aiError.textContent = e.message;
       } finally {
         analyseBtn.disabled = false;
