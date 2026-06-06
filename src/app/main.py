@@ -158,7 +158,7 @@ def card(member_id):
 @app.route("/card/<int:member_id>/badges")
 def card_badges(member_id):
     interests = deduplicate_donors(parse_interests(get_interests(member_id)))
-    return jsonify(get_badge_layout(interests))
+    return jsonify(get_badge_layout(interests, member_id))
 
 
 @app.route("/health")

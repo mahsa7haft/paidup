@@ -13,6 +13,13 @@ import os
 import re
 import requests
 from io import BytesIO
+
+try:
+    import cv2
+    import numpy as np
+    _HAS_CV2 = True
+except ImportError:
+    _HAS_CV2 = False
 from app import database as db
 from app.ai import resolve_person_to_company, resolve_company_domain
 from PIL import Image, ImageDraw, ImageFont
@@ -22,6 +29,62 @@ from app.parliament import get_thumbnail_url
 # Filename = party name slug (lowercase, spaces→hyphens). E.g. "labour.png".
 _PARTY_LOGOS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", "party_logos")
 _party_logo_cache: dict[str, "Image.Image | None"] = {}
+
+
+_face_cache: dict[int, int | None] = {}  # member_id → face_bottom px (fitted photo coords)
+
+
+def _detect_face_bottom(photo: Image.Image) -> int | None:
+    """
+    Run OpenCV Haar-cascade face detection on a fitted PIL photo.
+    Returns the y-coordinate of the bottom of the largest detected face,
+    or None if detection fails or cv2 is unavailable.
+    """
+    if not _HAS_CV2:
+        return None
+    try:
+        gray    = np.array(photo.convert("L"))
+        cascade = cv2.CascadeClassifier(
+            cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+        )
+        faces = cascade.detectMultiScale(
+            gray, scaleFactor=1.1, minNeighbors=5, minSize=(50, 50)
+        )
+        if not len(faces):
+            return None
+        x, y, w, h = max(faces, key=lambda f: f[2] * f[3])  # largest by area
+        return int(y + h)
+    except Exception:
+        return None
+
+
+def _suit_top(member_id: int | None, fitted_photo: "Image.Image | None") -> int:
+    """
+    Return the y-coordinate (in card pixels) where badges may start.
+    Uses face detection when possible; falls back to 65% of photo height.
+    Clamped to [55%, 78%] of PHOTO_H so detection errors can't produce
+    absurd values.
+    """
+    photo_y   = (CARD_H - PHOTO_H) // 2
+    fallback  = photo_y + int(PHOTO_H * 0.65)
+    clamp_min = photo_y + int(PHOTO_H * 0.55)
+    clamp_max = photo_y + int(PHOTO_H * 0.78)
+
+    face_bottom: int | None = None
+
+    if member_id is not None and member_id in _face_cache:
+        face_bottom = _face_cache[member_id]
+    elif fitted_photo is not None:
+        face_bottom = _detect_face_bottom(fitted_photo)
+        if member_id is not None:
+            _face_cache[member_id] = face_bottom
+
+    if face_bottom is None:
+        return fallback
+
+    margin = int(PHOTO_H * 0.05)   # 5% clearance below chin
+    raw    = photo_y + face_bottom + margin
+    return max(clamp_min, min(clamp_max, raw))
 
 
 def _load_party_logo(party: str) -> "Image.Image | None":
@@ -254,11 +317,15 @@ def _pack(badges: list[tuple[str, float, int]],
     return placed
 
 
-def _layout_badges(interests: list[dict]) -> list[dict]:
+def _layout_badges(interests: list[dict],
+                   member_id: int | None = None,
+                   fitted_photo: "Image.Image | None" = None) -> list[dict]:
     """
     Compute badge positions and classifications using the same algorithm as
     generate_card. Separating this lets the /badges endpoint return positions
     without re-rendering the PNG.
+    Pass member_id (and optionally the already-fetched fitted_photo) so face
+    detection can determine where badges may safely start.
     """
     donors = _aggregate(interests)
     if not donors:
@@ -267,10 +334,9 @@ def _layout_badges(interests: list[dict]) -> list[dict]:
     sized = sorted([(n, v, _badge_radius(v, max_val)) for n, v in donors],
                    key=lambda x: x[2], reverse=True)
 
-    photo_y = (CARD_H - PHOTO_H) // 2
-    suit_top    = photo_y + int(PHOTO_H * 0.65)  # 65% down — keeps badges off the face
-    suit_bottom = photo_y + PHOTO_H - 8
-    placed = _pack(sized, 8, suit_top, PHOTO_W - 8, suit_bottom)
+    top         = _suit_top(member_id, fitted_photo)
+    suit_bottom = (CARD_H - PHOTO_H) // 2 + PHOTO_H - 8
+    placed = _pack(sized, 8, top, PHOTO_W - 8, suit_bottom)
 
     # Shift all badges down so they sit at the bottom of the suit area.
     # With few badges they hug the bottom; only climb upward when there are too many.
@@ -291,9 +357,16 @@ def _layout_badges(interests: list[dict]) -> list[dict]:
     return result
 
 
-def get_badge_layout(interests: list[dict]) -> dict:
+def get_badge_layout(interests: list[dict], member_id: int | None = None) -> dict:
     """Return card dimensions + badge positions for the /badges endpoint."""
-    return {"card_w": CARD_W, "card_h": CARD_H, "badges": _layout_badges(interests)}
+    # Fetch and fit the photo so face detection uses the same image as generate_card
+    fitted = None
+    if member_id is not None:
+        raw = _fetch_photo(member_id)
+        if raw:
+            fitted = _fit_photo(raw, PHOTO_W, PHOTO_H)
+    return {"card_w": CARD_W, "card_h": CARD_H,
+            "badges": _layout_badges(interests, member_id, fitted)}
 
 
 # ── Badge drawing ─────────────────────────────────────────────────────────────
@@ -438,7 +511,7 @@ def generate_card(member_id: int, name: str, interests: list[dict],
     draw.line([(PHOTO_W, 0), (PHOTO_W, CARD_H)], fill=PANEL_LINE, width=1)
 
     # ── Badges on suit ──
-    layout = _layout_badges(interests)
+    layout = _layout_badges(interests, member_id, photo)
     for badge in layout:
         cx, cy, r = badge["cx"], badge["cy"], badge["r"]
         dname, dval = badge["name"], badge["value"]
