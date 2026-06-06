@@ -183,13 +183,15 @@ def _initials(name: str) -> str:
 def _aggregate(interests: list[dict]) -> list[tuple[str, float]]:
     totals: dict[str, float] = {}
     unknown_total = 0.0
+    has_unknown = False
     for i in interests:
         if i["donor"] != "Unknown":
             totals[i["donor"]] = totals.get(i["donor"], 0.0) + i["value"]
         else:
             unknown_total += i["value"]
+            has_unknown = True
     result = sorted(totals.items(), key=lambda x: x[1], reverse=True)
-    if unknown_total > 0:
+    if has_unknown:  # include even when all unknown entries are in-kind (value=0)
         result.append(("Unknown", unknown_total))
     return result
 
@@ -491,7 +493,7 @@ def generate_card(member_id: int, name: str, interests: list[dict],
     anon_count  = sum(1 for n, _ in all_donors if n == "Unknown")
     count_str = f"{named_count} declared donor{'' if named_count == 1 else 's'}"
     if anon_count:
-        count_str += f" + {anon_count} unattributed"
+        count_str += f" + {anon_count} unknown"
     draw.text((rx, ry), count_str, fill=TEXT_MID, font=font_sub)
     ry += 20
     draw.text((rx, ry), "Badge size = total donated", fill=TEXT_DIM, font=font_dim)
