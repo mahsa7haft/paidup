@@ -53,7 +53,9 @@ def lookup():
     member_id = mp["id"]
     mp_name = mp["nameDisplayAs"]
 
-    interests = deduplicate_donors(parse_interests(get_interests(member_id)))
+    interests = db.apply_donor_tags(
+        deduplicate_donors(parse_interests(get_interests(member_id)))
+    )
     total = sum(i["value"] for i in interests)
     oldest, newest = date_range(interests)
 

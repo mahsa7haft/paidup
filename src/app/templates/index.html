@@ -64,6 +64,8 @@
     td.cat { color: #888; font-size: 0.78rem; }
     td.date { color: #999; font-size: 0.78rem; white-space: nowrap; }
     td.summ { color: #666; font-size: 0.8rem; max-width: 240px; }
+    .donor-tag { display: inline-block; margin-top: 3px; margin-right: 3px; padding: 1px 5px; border-radius: 3px; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.02em; background: #e8e0d4; color: #555; border: 1px solid #c8c0b0; }
+    .donor-tag-pro-israel { background: #dff0e8; color: #1a6644; border-color: #a8d5bc; }
 
     /* ── DRAWER ── */
     .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.25); z-index: 100; }
@@ -448,9 +450,12 @@
         const aliasNote = i.aliases && i.aliases.length
           ? `<div style="color:#aaa;font-size:0.75rem;margin-top:2px">also listed as: ${i.aliases.join(', ')}</div>`
           : '';
+        const tagPills = (i.tags || []).map(t =>
+          `<span class="donor-tag donor-tag-${t.tag.replace(/[^a-z0-9]/g, '-')}">${t.label}</span>`
+        ).join('');
         const donorCell = isUnknown
           ? `<span style="color:#aaa;font-style:italic">Payer not named</span>`
-          : `${i.donor}${aliasNote}`;
+          : `${i.donor}${aliasNote}${tagPills ? '<div>' + tagPills + '</div>' : ''}`;
         return `
         <tr style="${isUnknown ? 'opacity:0.65' : ''}">
           <td>${donorCell}</td>

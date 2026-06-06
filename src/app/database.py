@@ -12,6 +12,7 @@ Railway: add the Postgres plugin and DATABASE_URL is injected automatically.
 
 import logging
 import os
+import time
 
 import psycopg2
 from psycopg2 import pool as pg_pool
@@ -78,8 +79,18 @@ def ensure_tables() -> None:
                     created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
                 )
             """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS donor_tags (
+                    name_pattern TEXT        NOT NULL,
+                    tag          TEXT        NOT NULL,
+                    label        TEXT        NOT NULL,
+                    notes        TEXT,
+                    updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    PRIMARY KEY (name_pattern, tag)
+                )
+            """)
         conn.commit()
-        log.info("DB: analyses + donor_company_links tables ready")
+        log.info("DB: analyses + donor_company_links + donor_tags tables ready")
     except Exception as exc:
         log.warning("DB ensure_tables failed: %s", exc)
         conn.rollback()
@@ -204,6 +215,98 @@ def save_donor_company_link(
         conn.rollback()
     finally:
         p.putconn(conn)
+
+
+def seed_donor_tags(rows: list[dict]) -> int:
+    """
+    Upsert rows from the CSV into donor_tags.
+    Each dict must have: name_pattern, tag, label, notes (notes may be empty).
+    Returns the number of rows upserted.
+    """
+    p = _get_pool()
+    if not p:
+        log.warning("seed_donor_tags: no DB connection")
+        return 0
+    conn = p.getconn()
+    try:
+        with conn.cursor() as cur:
+            for row in rows:
+                cur.execute(
+                    """
+                    INSERT INTO donor_tags (name_pattern, tag, label, notes, updated_at)
+                    VALUES (lower(%s), %s, %s, %s, NOW())
+                    ON CONFLICT (name_pattern, tag) DO UPDATE
+                        SET label      = EXCLUDED.label,
+                            notes      = EXCLUDED.notes,
+                            updated_at = NOW()
+                    """,
+                    (row["name_pattern"], row["tag"], row["label"], row.get("notes", "")),
+                )
+        conn.commit()
+        _invalidate_tags_cache()
+        return len(rows)
+    except Exception as exc:
+        log.warning("DB seed_donor_tags failed: %s", exc)
+        conn.rollback()
+        return 0
+    finally:
+        p.putconn(conn)
+
+
+# ── Tag cache (refreshed every 5 min) ─────────────────────────────────────────
+
+_tags_cache: list[dict] | None = None
+_tags_cache_ts: float = 0.0
+_TAGS_TTL = 300.0
+
+
+def _invalidate_tags_cache() -> None:
+    global _tags_cache, _tags_cache_ts
+    _tags_cache = None
+    _tags_cache_ts = 0.0
+
+
+def _load_tags() -> list[dict]:
+    global _tags_cache, _tags_cache_ts
+    now = time.monotonic()
+    if _tags_cache is not None and (now - _tags_cache_ts) < _TAGS_TTL:
+        return _tags_cache
+    p = _get_pool()
+    if not p:
+        return []
+    conn = p.getconn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT name_pattern, tag, label FROM donor_tags ORDER BY name_pattern")
+            rows = cur.fetchall()
+        _tags_cache = [{"pattern": r[0], "tag": r[1], "label": r[2]} for r in rows]
+        _tags_cache_ts = now
+        return _tags_cache
+    except Exception as exc:
+        log.warning("DB _load_tags failed: %s", exc)
+        return []
+    finally:
+        p.putconn(conn)
+
+
+def apply_donor_tags(interests: list[dict]) -> list[dict]:
+    """
+    Attach a 'tags' list to each interest dict based on case-insensitive
+    substring matching against donor_tags.name_pattern.
+    No-ops gracefully if DB is unavailable.
+    """
+    tag_rules = _load_tags()
+    if not tag_rules:
+        return interests
+    for entry in interests:
+        donor_lower = entry.get("donor", "").lower()
+        matched = [
+            {"tag": r["tag"], "label": r["label"]}
+            for r in tag_rules
+            if r["pattern"] in donor_lower
+        ]
+        entry["tags"] = matched
+    return interests
 
 
 def save_analysis(
