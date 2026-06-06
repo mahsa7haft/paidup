@@ -34,6 +34,8 @@ PERSON_FILL  = "#1a4a2e"
 PERSON_RIM   = "#27ae60"
 BADGE_TEXT   = "#ffffff"
 BADGE_VAL    = "#1D9E75"
+ANON_FILL    = "#5a5a5a"
+ANON_RIM     = "#888888"
 
 # Party brand colours (UK Parliament)
 _PARTY_COLOURS: dict[str, str] = {
@@ -155,10 +157,16 @@ def _initials(name: str) -> str:
 
 def _aggregate(interests: list[dict]) -> list[tuple[str, float]]:
     totals: dict[str, float] = {}
+    unknown_total = 0.0
     for i in interests:
         if i["donor"] != "Unknown":
             totals[i["donor"]] = totals.get(i["donor"], 0.0) + i["value"]
-    return sorted(totals.items(), key=lambda x: x[1], reverse=True)
+        else:
+            unknown_total += i["value"]
+    result = sorted(totals.items(), key=lambda x: x[1], reverse=True)
+    if unknown_total > 0:
+        result.append(("Unknown", unknown_total))
+    return result
 
 
 def _is_person(name: str) -> bool:
@@ -304,6 +312,21 @@ def _draw_person_badge(draw: ImageDraw.ImageDraw,
         draw.text((cx, cy), _fmt(value), fill=BADGE_TEXT, font=font_name, anchor="mm")
 
 
+def _draw_anonymous_badge(draw: ImageDraw.ImageDraw,
+                          cx: int, cy: int, r: int,
+                          value: float,
+                          font_val: ImageFont.FreeTypeFont,
+                          font_name: ImageFont.FreeTypeFont) -> None:
+    """Grey circle for entries where the payer is not named in the register."""
+    draw.ellipse([cx-r+2, cy-r+2, cx+r+2, cy+r+2], fill="#00000040")
+    draw.ellipse([cx-r, cy-r, cx+r, cy+r], fill=ANON_FILL, outline=ANON_RIM, width=2)
+    if r >= 28:
+        draw.text((cx, cy - r // 4), "?", fill=BADGE_TEXT, font=font_val, anchor="mm")
+        draw.text((cx, cy + r // 4 + 2), _fmt(value), fill="#dddddd", font=font_val, anchor="mm")
+    else:
+        draw.text((cx, cy), _fmt(value), fill=BADGE_TEXT, font=font_name, anchor="mm")
+
+
 def _draw_paidup_logo(draw: ImageDraw.ImageDraw,
                       x: int, y: int,
                       font_brand: ImageFont.FreeTypeFont,
@@ -363,7 +386,9 @@ def generate_card(member_id: int, name: str, interests: list[dict],
             badge_type, domain = _classify_donor(dname)
             fv = font_badge_val if r >= 22 else font_badge_name
             fn = font_badge_name
-            if badge_type == "company_logo" and domain:
+            if dname == "Unknown":
+                _draw_anonymous_badge(draw, cx, cy, r, dval, fv, fn)
+            elif badge_type == "company_logo" and domain:
                 _draw_company_logo_badge(card, draw, cx, cy, r, dname, dval, domain, fv, fn)
             elif badge_type == "person":
                 _draw_person_badge(draw, cx, cy, r, dname, dval, fv, fn)
@@ -394,9 +419,12 @@ def generate_card(member_id: int, name: str, interests: list[dict],
     draw.line([(rx, ry), (CARD_W - 24, ry)], fill=PANEL_LINE, width=1)
     ry += 14
 
-    donor_count = len(donors)
-    draw.text((rx, ry), f"{donor_count} declared donor{'' if donor_count == 1 else 's'}",
-              fill=TEXT_MID, font=font_sub)
+    named_count = sum(1 for n, _ in donors if n != "Unknown")
+    anon_count  = sum(1 for n, _ in donors if n == "Unknown")
+    count_str = f"{named_count} declared donor{'' if named_count == 1 else 's'}"
+    if anon_count:
+        count_str += f" + {anon_count} unattributed"
+    draw.text((rx, ry), count_str, fill=TEXT_MID, font=font_sub)
     ry += 16
     draw.text((rx, ry), "Badge size = total donated", fill=TEXT_DIM, font=font_dim)
 
