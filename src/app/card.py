@@ -276,17 +276,11 @@ def _draw_company_logo_badge(img: Image.Image, draw: ImageDraw.ImageDraw,
                               font_name: ImageFont.FreeTypeFont) -> None:
     logo = _fetch_logo(domain)
     if logo:
-        # Logo floats directly on the suit — no circle — sized to donation amount.
-        # Soft shadow behind the logo for legibility against any background.
         logo_size = r * 2
         logo = logo.resize((logo_size, logo_size), Image.LANCZOS)
-        shadow = Image.new("RGBA", (logo_size + 6, logo_size + 6), (0, 0, 0, 0))
-        shadow.paste((0, 0, 0, 60), [0, 0, logo_size + 6, logo_size + 6])
-        img.paste(shadow, (cx - logo_size // 2 + 3, cy - logo_size // 2 + 3), shadow)
         img.paste(logo, (cx - logo_size // 2, cy - logo_size // 2), logo)
     else:
         # No logo — plain circle with initials
-        draw.ellipse([cx-r+2, cy-r+2, cx+r+2, cy+r+2], fill="#00000040")
         draw.ellipse([cx-r, cy-r, cx+r, cy+r], fill=COMPANY_FILL, outline=COMPANY_RIM, width=2)
         inits = _initials(name)
         draw.text((cx, cy - r // 4), inits, fill=BADGE_TEXT, font=font_val, anchor="mm")
@@ -298,7 +292,6 @@ def _draw_company_initials_badge(draw: ImageDraw.ImageDraw,
                                   name: str, value: float,
                                   font_val: ImageFont.FreeTypeFont,
                                   font_name: ImageFont.FreeTypeFont) -> None:
-    draw.ellipse([cx-r+2, cy-r+2, cx+r+2, cy+r+2], fill="#00000040")
     draw.ellipse([cx-r, cy-r, cx+r, cy+r], fill=COMPANY_FILL, outline=COMPANY_RIM, width=2)
     inits = _initials(name)
     val_str = _fmt(value)
@@ -318,18 +311,16 @@ def _draw_person_badge(draw: ImageDraw.ImageDraw,
                         font_val: ImageFont.FreeTypeFont,
                         font_name: ImageFont.FreeTypeFont) -> None:
     """Clean circle with white person silhouette — name/value come from hover tooltip."""
-    # Drop shadow + badge circle
-    draw.ellipse([cx-r+2, cy-r+2, cx+r+2, cy+r+2], fill="#00000040")
     draw.ellipse([cx-r, cy-r, cx+r, cy+r], fill=PERSON_FILL, outline=PERSON_RIM, width=2)
     # Head
-    head_r = max(3, int(r * 0.2))
-    head_cy = cy - int(r * 0.3)
+    head_r = max(4, int(r * 0.27))
+    head_cy = cy - int(r * 0.28)
     draw.ellipse([cx-head_r, head_cy-head_r, cx+head_r, head_cy+head_r], fill="white")
-    # Shoulders / body
-    sh_w = int(r * 0.7)
-    sh_h = int(r * 0.4)
-    sh_cy = cy + int(r * 0.25)
-    draw.ellipse([cx-sh_w, sh_cy-sh_h, cx+sh_w, sh_cy+sh_h], fill="white")
+    # Shoulders: top half of a wide ellipse (chord = filled arc from 180°→360° clockwise)
+    sh_w = int(r * 0.68)
+    sh_h = int(r * 0.5)
+    sh_cy = cy + int(r * 0.42)
+    draw.chord([cx-sh_w, sh_cy-sh_h, cx+sh_w, sh_cy+sh_h], 180, 360, fill="white")
 
 
 def _draw_anonymous_badge(draw: ImageDraw.ImageDraw,
@@ -343,8 +334,6 @@ def _draw_anonymous_badge(draw: ImageDraw.ImageDraw,
     bx0, by0 = cx - bw // 2, cy - bh // 2
     bx1, by1 = cx + bw // 2, cy + bh // 2
     rad = max(4, r // 6)
-    # Shadow
-    draw.rounded_rectangle([bx0+2, by0+2, bx1+2, by1+2], radius=rad, fill="#00000030")
     # Cream card, dashed grey border effect (solid with inner lighter rect)
     draw.rounded_rectangle([bx0, by0, bx1, by1], radius=rad, fill=CREAM, outline=ANON_RIM, width=2)
     draw.rounded_rectangle([bx0+4, by0+4, bx1-4, by1-4], radius=max(2, rad-2),
