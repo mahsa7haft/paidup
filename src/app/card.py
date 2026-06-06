@@ -138,7 +138,7 @@ def _fmt(value: float) -> str:
         return f"£{value / 1_000:.0f}k"
     if value > 0:
         return f"£{int(value)}"
-    return "In kind"
+    return "Non-cash"
 
 
 def _badge_radius(value: float, max_value: float,
@@ -310,17 +310,20 @@ def _draw_person_badge(draw: ImageDraw.ImageDraw,
                         name: str, value: float,
                         font_val: ImageFont.FreeTypeFont,
                         font_name: ImageFont.FreeTypeFont) -> None:
-    """Dark green circle with classic two-circle person silhouette (head + body)."""
+    """Dark green circle with person silhouette: head circle + shoulder dome."""
     draw.ellipse([cx-r, cy-r, cx+r, cy+r], fill=PERSON_FILL, outline=PERSON_RIM, width=2)
-    # Head — sized and positioned to stay inside the badge circle
-    head_r = max(4, int(r * 0.27))
-    head_cy = cy - int(r * 0.28)
+    # Head
+    head_r = max(4, int(r * 0.25))
+    head_cy = cy - int(r * 0.25)
     draw.ellipse([cx-head_r, head_cy-head_r, cx+head_r, head_cy+head_r], fill="white")
-    # Body — a larger circle below; both circles together read as a person icon.
-    # Centred at (cx, cy + 0.36r) with radius 0.38r — corners stay within badge (√(0.38²+0.36²) ≈ 0.52 < 1).
-    body_r = int(r * 0.38)
-    body_cy = cy + int(r * 0.36)
-    draw.ellipse([cx-body_r, body_cy-body_r, cx+body_r, body_cy+body_r], fill="white")
+    # Shoulders: chord(0, 180) = bottom half of ellipse = U-shaped dome.
+    # Flat top sits just below the head; dome curves downward.
+    # center_y of the bbox == flat_top, so: bbox = [flat_top - sh_h .. flat_top + sh_h].
+    gap = max(2, int(r * 0.06))
+    flat_top = head_cy + head_r + gap
+    sh_w = int(r * 0.65)
+    sh_h = int(r * 0.38)
+    draw.chord([cx - sh_w, flat_top - sh_h, cx + sh_w, flat_top + sh_h], 0, 180, fill="white")
 
 
 def _draw_anonymous_badge(draw: ImageDraw.ImageDraw,
@@ -328,10 +331,17 @@ def _draw_anonymous_badge(draw: ImageDraw.ImageDraw,
                           value: float,
                           font_val: ImageFont.FreeTypeFont,
                           font_name: ImageFont.FreeTypeFont) -> None:
-    """Dark grey circle with a white question mark — unknown/unnamed payer."""
+    """Dark grey circle with a large white question mark filling the badge."""
     draw.ellipse([cx-r, cy-r, cx+r, cy+r], fill=ANON_FILL, outline=ANON_RIM, width=2)
-    font = font_val if r >= 22 else font_name
-    draw.text((cx, cy), "?", fill="white", font=font, anchor="mm")
+    # Load a font sized to fill the badge — ~1.3× radius so the glyph dominates.
+    qfont = font_val
+    for path in ["/System/Library/Fonts/Helvetica.ttc", "/System/Library/Fonts/Arial.ttf"]:
+        try:
+            qfont = ImageFont.truetype(path, max(12, int(r * 1.3)))
+            break
+        except Exception:
+            pass
+    draw.text((cx, cy), "?", fill="white", font=qfont, anchor="mm")
 
 
 def _draw_paidup_logo(draw: ImageDraw.ImageDraw,
