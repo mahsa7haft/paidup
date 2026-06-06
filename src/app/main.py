@@ -144,8 +144,9 @@ def analyze_mp():
 @app.route("/card/<int:member_id>")
 def card(member_id):
     mp_name = request.args.get("name", "")
+    mp_party = request.args.get("party", "")
     interests = deduplicate_donors(parse_interests(get_interests(member_id)))
-    img = generate_card(member_id, mp_name, interests)
+    img = generate_card(member_id, mp_name, interests, party=mp_party)
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     buf.seek(0)
