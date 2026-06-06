@@ -108,9 +108,14 @@ def _fit_photo(photo: Image.Image, target_w: int, target_h: int) -> Image.Image:
 
 def _fetch_logo(domain: str) -> Image.Image | None:
     try:
-        r = requests.get(f"https://logo.clearbit.com/{domain}", timeout=4)
-        if r.status_code == 200:
-            return Image.open(BytesIO(r.content)).convert("RGBA")
+        # Google Favicons API — reliable, no auth, works for virtually any domain
+        url = f"https://www.google.com/s2/favicons?domain={domain}&sz=64"
+        r = requests.get(url, timeout=5)
+        if r.status_code == 200 and len(r.content) > 200:
+            img = Image.open(BytesIO(r.content)).convert("RGBA")
+            # Reject tiny default favicons (Google returns 16×16 grey square for unknowns)
+            if img.size[0] >= 32:
+                return img
     except Exception:
         pass
     return None
@@ -274,42 +279,50 @@ def _draw_person_badge(draw: ImageDraw.ImageDraw,
                         name: str, value: float,
                         font_val: ImageFont.FreeTypeFont,
                         font_name: ImageFont.FreeTypeFont) -> None:
-    bw = int(r * 2.2)
+    """Name-tag style: cream card, green border, large readable name, amount in green."""
+    bw = int(r * 2.4)
     bh = int(r * 2.0)
     bx0, by0 = cx - bw // 2, cy - bh // 2
     bx1, by1 = cx + bw // 2, cy + bh // 2
-    radius = max(4, r // 7)
-    draw.rounded_rectangle([bx0+2, by0+2, bx1+2, by1+2], radius=radius, fill="#00000040")
-    draw.rounded_rectangle([bx0, by0, bx1, by1], radius=radius,
-                            fill=PERSON_FILL, outline=PERSON_RIM, width=2)
-    strip_h = max(14, r // 3)
-    draw.rounded_rectangle([bx0, by0, bx1, by0 + strip_h], radius=radius, fill=PERSON_RIM)
-    draw.rectangle([bx0, by0 + strip_h // 2, bx1, by0 + strip_h], fill=PERSON_RIM)
+    rad = max(4, r // 6)
 
-    if r >= 30:
-        icon_cy = by0 + strip_h + (bh - strip_h) // 3
-        ir = max(5, r // 8)
-        draw.ellipse([cx - ir, icon_cy - ir, cx + ir, icon_cy + ir], fill=BADGE_TEXT)
-        draw.arc([cx - ir*2, icon_cy + ir//2, cx + ir*2, icon_cy + ir*3],
-                 start=0, end=180, fill=BADGE_TEXT, width=2)
-        title_words = {"mr", "mrs", "ms", "miss", "dr", "prof", "lord", "lady",
-                       "sir", "dame", "baroness", "baron", "earl", "viscount", "the", "rt", "hon"}
-        display_parts = [p for p in name.split() if p.lower() not in title_words] or name.split()
+    # Shadow
+    draw.rounded_rectangle([bx0+2, by0+2, bx1+2, by1+2], radius=rad, fill="#00000030")
+    # Cream card body with green border
+    draw.rounded_rectangle([bx0, by0, bx1, by1], radius=rad, fill=CREAM, outline=PERSON_RIM, width=2)
+    # Thin green header strip
+    strip_h = max(10, r // 4)
+    draw.rounded_rectangle([bx0, by0, bx1, by0 + strip_h + rad], radius=rad, fill=PERSON_RIM)
+    draw.rectangle([bx0, by0 + strip_h, bx1, by0 + strip_h + rad], fill=PERSON_RIM)
+    draw.rectangle([bx0 + 2, by0 + strip_h + rad, bx1 - 2, by0 + strip_h + rad + 1], fill=CREAM)
+
+    # Strip dot decoration
+    dot_r = max(2, strip_h // 3)
+    draw.ellipse([cx - dot_r, by0 + strip_h // 2 - dot_r,
+                  cx + dot_r, by0 + strip_h // 2 + dot_r], fill=CREAM)
+
+    title_words = {"mr", "mrs", "ms", "miss", "dr", "prof", "lord", "lady",
+                   "sir", "dame", "baroness", "baron", "earl", "viscount", "the", "rt", "hon"}
+    display_parts = [p for p in name.split() if p.lower() not in title_words] or name.split()
+
+    if r >= 28:
         line1 = " ".join(display_parts[:2])
         line2 = " ".join(display_parts[2:]) if len(display_parts) > 2 else ""
-        ty = icon_cy + ir * 3 + 4
-        draw.text((cx, ty), line1, fill=BADGE_TEXT, font=font_name, anchor="mm")
+        content_cy = by0 + strip_h + (bh - strip_h) // 2
         if line2:
-            draw.text((cx, ty + 13), line2, fill=BADGE_TEXT, font=font_name, anchor="mm")
-            draw.text((cx, ty + 27), _fmt(value), fill=BADGE_VAL, font=font_name, anchor="mm")
+            draw.text((cx, content_cy - 14), line1, fill=TEXT_DARK, font=font_name, anchor="mm")
+            draw.text((cx, content_cy),       line2, fill=TEXT_DARK, font=font_name, anchor="mm")
+            draw.text((cx, content_cy + 14),  _fmt(value), fill=PERSON_RIM, font=font_name, anchor="mm")
         else:
-            draw.text((cx, ty + 14), _fmt(value), fill=BADGE_VAL, font=font_name, anchor="mm")
+            draw.text((cx, content_cy - 8),  line1, fill=TEXT_DARK, font=font_val, anchor="mm")
+            draw.text((cx, content_cy + 10), _fmt(value), fill=PERSON_RIM, font=font_name, anchor="mm")
     elif r >= 20:
-        short = name.split()[-1]
-        draw.text((cx, cy - 6), short, fill=BADGE_TEXT, font=font_name, anchor="mm")
-        draw.text((cx, cy + 8), _fmt(value), fill=BADGE_VAL, font=font_name, anchor="mm")
+        surname = display_parts[-1] if display_parts else name
+        content_cy = by0 + strip_h + (bh - strip_h) // 2
+        draw.text((cx, content_cy - 7),  surname,      fill=TEXT_DARK, font=font_name, anchor="mm")
+        draw.text((cx, content_cy + 7),  _fmt(value),  fill=PERSON_RIM, font=font_name, anchor="mm")
     else:
-        draw.text((cx, cy), _fmt(value), fill=BADGE_TEXT, font=font_name, anchor="mm")
+        draw.text((cx, cy), _fmt(value), fill=TEXT_DARK, font=font_name, anchor="mm")
 
 
 def _draw_anonymous_badge(draw: ImageDraw.ImageDraw,
@@ -317,14 +330,24 @@ def _draw_anonymous_badge(draw: ImageDraw.ImageDraw,
                           value: float,
                           font_val: ImageFont.FreeTypeFont,
                           font_name: ImageFont.FreeTypeFont) -> None:
-    """Grey circle for entries where the payer is not named in the register."""
-    draw.ellipse([cx-r+2, cy-r+2, cx+r+2, cy+r+2], fill="#00000040")
-    draw.ellipse([cx-r, cy-r, cx+r, cy+r], fill=ANON_FILL, outline=ANON_RIM, width=2)
+    """Stamp-style badge for entries where the payer is not named in the register."""
+    bw = int(r * 2.4)
+    bh = int(r * 1.8)
+    bx0, by0 = cx - bw // 2, cy - bh // 2
+    bx1, by1 = cx + bw // 2, cy + bh // 2
+    rad = max(4, r // 6)
+    # Shadow
+    draw.rounded_rectangle([bx0+2, by0+2, bx1+2, by1+2], radius=rad, fill="#00000030")
+    # Cream card, dashed grey border effect (solid with inner lighter rect)
+    draw.rounded_rectangle([bx0, by0, bx1, by1], radius=rad, fill=CREAM, outline=ANON_RIM, width=2)
+    draw.rounded_rectangle([bx0+4, by0+4, bx1-4, by1-4], radius=max(2, rad-2),
+                            fill=None, outline="#cccccc", width=1)
     if r >= 28:
-        draw.text((cx, cy - r // 4), "?", fill=BADGE_TEXT, font=font_val, anchor="mm")
-        draw.text((cx, cy + r // 4 + 2), _fmt(value), fill="#dddddd", font=font_val, anchor="mm")
+        draw.text((cx, cy - r // 5 - 2), "ANON.", fill=ANON_RIM, font=font_name, anchor="mm")
+        draw.text((cx, cy + r // 4),     _fmt(value), fill=ANON_FILL, font=font_val, anchor="mm")
     else:
-        draw.text((cx, cy), _fmt(value), fill=BADGE_TEXT, font=font_name, anchor="mm")
+        draw.text((cx, cy - 6), "?",         fill=ANON_RIM, font=font_name, anchor="mm")
+        draw.text((cx, cy + 6), _fmt(value), fill=ANON_FILL, font=font_name, anchor="mm")
 
 
 def _draw_paidup_logo(draw: ImageDraw.ImageDraw,
@@ -389,7 +412,7 @@ def generate_card(member_id: int, name: str, interests: list[dict],
                 _draw_anonymous_badge(draw, cx, cy, r, dval, fv, fn)
                 continue
             badge_type, domain = _classify_donor(dname)
-            elif badge_type == "company_logo" and domain:
+            if badge_type == "company_logo" and domain:
                 _draw_company_logo_badge(card, draw, cx, cy, r, dname, dval, domain, fv, fn)
             elif badge_type == "person":
                 _draw_person_badge(draw, cx, cy, r, dname, dval, fv, fn)
