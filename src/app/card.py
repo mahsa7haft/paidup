@@ -13,6 +13,8 @@ import re
 import textwrap
 import requests
 from io import BytesIO
+from app import database as db
+from app.ai import resolve_person_to_company
 from PIL import Image, ImageDraw, ImageFont
 from app.parliament import get_thumbnail_url
 
@@ -124,9 +126,6 @@ def _classify_donor(name: str) -> tuple[str, str | None]:
     For person-looking names we check the DB for a stored company association,
     then fall back to asking Claude (result stored for next time).
     """
-    from app import database as db
-    from app.ai import resolve_person_to_company
-
     if not _is_person(name):
         # Straightforward company — try Clearbit
         domain = _guess_domain(name)

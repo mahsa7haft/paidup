@@ -15,6 +15,7 @@ import os
 
 import psycopg2
 from psycopg2 import pool as pg_pool
+from app.text_utils import best_fuzzy_match
 
 log = logging.getLogger(__name__)
 
@@ -129,13 +130,12 @@ def get_donor_company_link(donor_name: str) -> dict | None:
     Returned dict has keys: company_name (str|None), logo_domain (str|None), source (str).
     logo_domain == NO_COMPANY means AI confirmed this is just a person, no corporate link.
     """
-    from app.text_utils import best_fuzzy_match
-
     p = _get_pool()
     if not p:
         return None
-    conn = p.getconn()
+    conn = None
     try:
+        conn = p.getconn()
         with conn.cursor() as cur:
             # 1. Exact match
             cur.execute(
@@ -165,7 +165,8 @@ def get_donor_company_link(donor_name: str) -> dict | None:
         log.warning("DB get_donor_company_link failed: %s", exc)
         return None
     finally:
-        p.putconn(conn)
+        if conn is not None:
+            p.putconn(conn)
 
 
 def save_donor_company_link(

@@ -15,8 +15,8 @@ _SUFFIXES = re.compile(
     re.IGNORECASE,
 )
 _TITLES = re.compile(
-    r"^(the|mr|mrs|ms|miss|dr|prof|lord|lady|sir|dame|baroness|baron|earl|"
-    r"viscount|rt\s+hon|the\s+rt\s+hon)\s+",
+    r"^(the\s+rt\s+hon|rt\s+hon|mr|mrs|ms|miss|dr|prof|lord|lady|sir|dame|"
+    r"baroness|baron|earl|viscount|the)\s+",
     re.IGNORECASE,
 )
 _SPACE = re.compile(r"\s+")
