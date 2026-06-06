@@ -325,12 +325,8 @@
       document.getElementById('card-img').src =
         `/card/${data.id}?name=${encodeURIComponent(data.name)}&party=${party}`;
 
-      const knownInterests = (data.interests || []).filter(i => i.donor !== 'Unknown');
-      const unknownCount = data.count - knownInterests.length;
-      const countLabel = unknownCount > 0
-        ? `${knownInterests.length} entr${knownInterests.length !== 1 ? 'ies' : 'y'} · ${unknownCount} unattributed`
-        : `${data.count} entr${data.count !== 1 ? 'ies' : 'y'}`;
-      document.getElementById('toggle-list-count').textContent = countLabel;
+      document.getElementById('toggle-list-count').textContent =
+        `${data.count} entr${data.count !== 1 ? 'ies' : 'y'}`;
       document.getElementById('interests-table').style.display = 'none';
       document.getElementById('toggle-list').classList.remove('open');
       document.getElementById('toggle-list-label').textContent = 'Show declared interests';
@@ -338,13 +334,17 @@
       renderSources(data.sources || {});
 
       const tbody = document.getElementById('interests-body');
-      tbody.innerHTML = knownInterests.map(i => {
+      tbody.innerHTML = (data.interests || []).map(i => {
+        const isUnknown = i.donor === 'Unknown';
         const aliasNote = i.aliases && i.aliases.length
           ? `<div style="color:#aaa;font-size:0.75rem;margin-top:2px">also listed as: ${i.aliases.join(', ')}</div>`
           : '';
+        const donorCell = isUnknown
+          ? `<span style="color:#aaa;font-style:italic">Payer not named</span>`
+          : `${i.donor}${aliasNote}`;
         return `
-        <tr>
-          <td>${i.donor}${aliasNote}</td>
+        <tr style="${isUnknown ? 'opacity:0.65' : ''}">
+          <td>${donorCell}</td>
           <td class="value">${i.value ? '£' + i.value.toLocaleString() : 'In kind'}</td>
           <td class="cat">${i.category}</td>
           <td class="date">${i.date || '—'}</td>
