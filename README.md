@@ -80,13 +80,51 @@ THEYWORKFORYOU_API_KEY=your-key-here
 
 # Flask session secret (any random string is fine locally)
 FLASK_SECRET_KEY=change-me
+
+# Optional — local Postgres (see step 4 below)
+# DATABASE_URL=postgresql://paidup:paidup_dev@localhost:5432/paidup
+
+# Optional — local Redis
+# REDIS_URL=redis://localhost:6379
 ```
 
 > The Parliament APIs require no key. Only the AI features need `ANTHROPIC_API_KEY`.
 
 > **Cost note:** each click of "Analyse with Claude" makes one API call using `claude-sonnet-4-6`. At typical interest-register sizes (~1,000 tokens in, ~400 out) this costs roughly **$0.003–0.005 per analysis**. Running all five prompt styles on one MP costs under $0.025. There is no background polling — the API is only called when you explicitly click the button.
 
-### 4. Run the app
+### 4. (Optional) Run Postgres locally with Docker
+
+The app works without a database — Postgres is only needed for two features:
+- **Persistent AI analysis cache** (28-day TTL, survives restarts)
+- **Smart donor badge resolution** — stores whether a titled donor (Lord, Sir, etc.) is linked to a company, so Claude is only asked once per person
+
+If you have [Docker](https://www.docker.com) installed, spin up a local Postgres instance in one command:
+
+```bash
+docker run -d \
+  --name paidup-postgres \
+  -e POSTGRES_DB=paidup \
+  -e POSTGRES_USER=paidup \
+  -e POSTGRES_PASSWORD=paidup_dev \
+  -p 5432:5432 \
+  postgres:16-alpine
+```
+
+Then add this to your `.env`:
+
+```
+DATABASE_URL=postgresql://paidup:paidup_dev@localhost:5432/paidup
+```
+
+The app creates the required tables automatically on startup. To stop and restart the container between sessions:
+
+```bash
+docker stop paidup-postgres   # stop (data is preserved)
+docker start paidup-postgres  # restart
+docker rm -f paidup-postgres  # delete completely
+```
+
+### 5. Run the app
 
 ```bash
 PYTHONPATH=src uv run python -m app.main
@@ -165,6 +203,21 @@ Railway deploys automatically on every push to `main`. Once the build completes,
 
 ---
 
+## Running Tests
+
+```bash
+uv run pytest tests/ -v
+```
+
+64 tests across four modules — no database or API key needed (all external calls are mocked):
+
+| File | What it covers |
+|---|---|
+| `tests/test_text_utils.py` | Name normalisation, TF-IDF fuzzy matching |
+| `tests/test_card_badges.py` | Person/company detection, initials, badge classification |
+| `tests/test_database_links.py` | Donor→company DB helpers, fuzzy fallback, rollback on error |
+| `tests/test_ai_resolve.py` | Claude Haiku resolver — valid JSON, empty response, markdown fences, exceptions |
+
 ## Project Structure
 
 ```
@@ -174,16 +227,23 @@ paidup/
 │       ├── main.py              # Flask entry point + routes
 │       ├── parliament.py        # UK Parliament API client
 │       ├── theyworkforyou.py    # TheyWorkForYou API client
-│       ├── ai.py                # Claude AI analysis layer
-│       ├── card.py              # Donor card image generator (Pillow)
+│       ├── ai.py                # Claude AI analysis + donor company resolver (Haiku)
+│       ├── card.py              # Donor card image generator (Pillow, brand F design)
+│       ├── database.py          # PostgreSQL layer — analysis cache + donor_company_links
+│       ├── cache.py             # Redis wrapper (L1 cache)
+│       ├── text_utils.py        # Shared name normalisation + TF-IDF fuzzy matching
 │       ├── prompts/             # Versioned AI prompt files
 │       │   ├── summary_v1.txt
 │       │   ├── investigative_v1.txt
 │       │   ├── donor_profiles_v1.txt
-│       │   ├── factional_v1.txt
 │       │   └── gaps_v1.txt
 │       └── templates/
-│           └── index.html       # Web UI
+│           └── index.html       # Web UI (cream / brand F theme)
+├── tests/
+│   ├── test_text_utils.py
+│   ├── test_card_badges.py
+│   ├── test_database_links.py
+│   └── test_ai_resolve.py
 ├── pyproject.toml
 ├── .env.example
 └── uv.lock
