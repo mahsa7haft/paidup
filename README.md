@@ -36,6 +36,7 @@ Search any MP by name and instantly see their declared financial interests — d
 | Caching L1 | Redis (Parliament lookups 1h, AI results 24h) |
 | Caching L2 | PostgreSQL (AI results 28 days, donor links permanent) |
 | Package manager | uv |
+| Observability | Langfuse (token usage, cost, latency per Claude call) |
 
 ## Data Sources
 
@@ -99,6 +100,11 @@ FLASK_SECRET_KEY=change-me
 
 # Optional — local Redis
 # REDIS_URL=redis://localhost:6379
+
+# Optional — Langfuse observability (token usage, cost, latency per Claude call)
+# Get keys at https://cloud.langfuse.com → Settings → API Keys
+# LANGFUSE_PUBLIC_KEY=pk-lf-...
+# LANGFUSE_SECRET_KEY=sk-lf-...
 ```
 
 > The Parliament APIs require no key. Only the AI features need `ANTHROPIC_API_KEY`.
@@ -253,6 +259,8 @@ In your Railway project, go to **Variables** and add:
 | `FLASK_SECRET_KEY` | Any long random string |
 | `REDIS_URL` | Set automatically by the Railway Redis plugin (see below) |
 | `PORT` | Railway sets this automatically — do not override |
+| `LANGFUSE_PUBLIC_KEY` | Optional — Langfuse observability ([cloud.langfuse.com](https://cloud.langfuse.com)) |
+| `LANGFUSE_SECRET_KEY` | Optional — Langfuse observability |
 
 ### 4. Set the start command
 
