@@ -147,8 +147,11 @@ def analyze_mp():
 def card(member_id):
     mp_name = request.args.get("name", "")
     mp_party = request.args.get("party", "")
+    mp_title = request.args.get("title", "")
     interests = deduplicate_donors(parse_interests(get_interests(member_id)))
-    img = generate_card(member_id, mp_name, interests, party=mp_party)
+    oldest, newest = date_range(interests)
+    img = generate_card(member_id, mp_name, interests, party=mp_party,
+                        title=mp_title, date_from=oldest, date_to=newest)
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     buf.seek(0)

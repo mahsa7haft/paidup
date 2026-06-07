@@ -178,7 +178,7 @@
     .card-wrap { position: relative; width: 100%; max-width: 800px; display: block; }
     .badge-overlay { position: absolute; inset: 0; pointer-events: none; border-radius: 10px 10px 0 0; overflow: hidden; }
     .badge-hotspot {
-      position: absolute; border-radius: 50%; pointer-events: all; cursor: default;
+      position: absolute; border-radius: 50%; pointer-events: all;
     }
     .badge-tooltip {
       position: absolute; pointer-events: none; z-index: 10;
@@ -187,11 +187,11 @@
       min-width: 110px; max-width: 220px; transform: translateX(-50%);
     }
     .badge-tooltip::after {
-      content: ''; position: absolute; bottom: -7px; left: 50%; transform: translateX(-50%);
+      content: ''; position: absolute; bottom: -7px; left: var(--arrow-left, 50%); transform: translateX(-50%);
       border: 7px solid transparent; border-top-color: #d8d0c4; border-bottom: none;
     }
     .badge-tooltip::before {
-      content: ''; position: absolute; bottom: -6px; left: 50%; transform: translateX(-50%);
+      content: ''; position: absolute; bottom: -6px; left: var(--arrow-left, 50%); transform: translateX(-50%);
       border: 6px solid transparent; border-top-color: #fff; border-bottom: none; z-index: 1;
     }
     .bt-name { font-weight: 600; font-size: 0.82rem; color: #1a1a1a; word-break: break-word; }
@@ -352,15 +352,17 @@
       const badgeCx = badge.cx * scale;
       const badgeTopY = (badge.cy - badge.r) * scale;
 
-      // After inserting (to get height), position above the badge
       const ttH = tt.offsetHeight;
       const ttW = tt.offsetWidth;
       const wrapW = overlayEl.clientWidth;
 
       const top = badgeTopY - ttH - 8;
-      // Clamp left so tooltip stays within overlay
       const rawLeft = badgeCx;
       const left = Math.max(ttW / 2, Math.min(wrapW - ttW / 2, rawLeft));
+
+      // Keep arrow pointing at badge center even when tooltip is clamped
+      const arrowPct = Math.max(10, Math.min(90, (rawLeft - left + ttW / 2) / ttW * 100));
+      tt.style.setProperty('--arrow-left', `${arrowPct}%`);
 
       tt.style.top = `${Math.max(4, top)}px`;
       tt.style.left = `${left}px`;
@@ -489,7 +491,8 @@
       cardImg.onerror = () => { _stopCardLoading(); };
 
       const party = encodeURIComponent(data.party || '');
-      cardImg.src = `/card/${data.id}?name=${encodeURIComponent(data.name)}&party=${party}`;
+      const title = encodeURIComponent((data.govt_posts || [])[0] || '');
+      cardImg.src = `/card/${data.id}?name=${encodeURIComponent(data.name)}&party=${party}&title=${title}`;
       _fetchBadgeLayout(data.id);
 
       document.getElementById('toggle-list-count').textContent =
