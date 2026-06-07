@@ -412,11 +412,7 @@ def _draw_company_logo_badge(img: Image.Image, draw: ImageDraw.ImageDraw,
         logo = logo.resize((logo_size, logo_size), Image.LANCZOS)
         img.paste(logo, (cx - logo_size // 2, cy - logo_size // 2), logo)
     else:
-        # No logo — plain circle with initials
-        draw.ellipse([cx-r, cy-r, cx+r, cy+r], fill=COMPANY_FILL, outline=COMPANY_RIM, width=2)
-        inits = _initials(name)
-        draw.text((cx, cy - r // 4), inits, fill=BADGE_TEXT, font=font_val, anchor="mm")
-        draw.text((cx, cy + r // 4 + 2), _fmt(value), fill=BADGE_VAL, font=font_val, anchor="mm")
+        _draw_anonymous_badge(draw, cx, cy, r, value, font_val, font_name, show_q=False)
 
 
 def _draw_company_initials_badge(draw: ImageDraw.ImageDraw,
