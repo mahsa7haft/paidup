@@ -121,3 +121,6 @@ Known limitation: legal suffixes (`Ltd`, `Limited`, `plc`) can push similar name
 | `REDIS_URL` | No | L1 cache; Railway Redis plugin sets this automatically |
 | `DATABASE_URL` | No | L2 persistent store; Railway Postgres plugin sets this automatically |
 | `PORT` | No | Defaults to 5002; Railway sets this automatically |
+| `LANGFUSE_PUBLIC_KEY` | No | Langfuse observability — token usage, cost, latency per Claude call |
+| `LANGFUSE_SECRET_KEY` | No | Langfuse observability — token usage, cost, latency per Claude call |
+| `LANGFUSE_HOST` | No | Defaults to `https://cloud.langfuse.com`; set for self-hosted |
