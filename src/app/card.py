@@ -513,7 +513,8 @@ def _draw_anonymous_badge(draw: ImageDraw.ImageDraw,
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def generate_card(member_id: int, name: str, interests: list[dict],
-                  party: str = "") -> Image.Image:
+                  party: str = "", title: str = "",
+                  date_from: str = "", date_to: str = "") -> Image.Image:
     card = Image.new("RGB", (CARD_W, CARD_H), CREAM)
     draw = ImageDraw.Draw(card)
 
@@ -555,7 +556,11 @@ def generate_card(member_id: int, name: str, interests: list[dict],
     rx, ry = PHOTO_W + 28, 30
 
     draw.text((rx, ry), name, fill=TEXT_DARK, font=font_name_lg)
-    ry += 34
+    ry += 30
+    if title:
+        draw.text((rx, ry), title, fill=TEXT_MID, font=font_sub)
+        ry += 20
+    ry += 4
 
     if party:
         logo_img = _load_party_logo(party)
@@ -601,5 +606,9 @@ def generate_card(member_id: int, name: str, interests: list[dict],
     draw.text((rx, ry), count_str, fill=TEXT_MID, font=font_sub)
     ry += 20
     draw.text((rx, ry), "Badge size = total donated", fill=TEXT_DIM, font=font_dim)
+
+    if date_from and date_to:
+        draw.text((rx, CARD_H - 16), f"Data covers {date_from} to {date_to}",
+                  fill=TEXT_DIM, font=font_dim, anchor="ls")
 
     return card

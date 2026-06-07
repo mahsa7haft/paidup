@@ -2,6 +2,8 @@
 
 **See who funds UK politicians.**
 
+![PaidUp demo](demo.gif)
+
 Search any MP by name and instantly see their declared financial interests — donors, gifts, hospitality, and shareholdings — pulled live from the official UK Parliament Register of Members' Financial Interests. Includes AI-powered analysis to surface conflicts of interest, donor profiles, and factional leanings.
 
 ## What it does
