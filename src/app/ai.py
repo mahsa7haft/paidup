@@ -157,8 +157,8 @@ def analyze(
         usage={"input": message.usage.input_tokens, "output": message.usage.output_tokens, "unit": "TOKENS"},
         metadata={"mp": mp_name, "prompt_key": prompt_key, "prompt_version": prompt_cfg["version"]},
     )
-    if _langfuse_client:
-        _langfuse_client.flush()
+    if _LANGFUSE:
+        langfuse_context.flush()
     return message.content[0].text
 
 
