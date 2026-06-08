@@ -124,3 +124,8 @@ Known limitation: legal suffixes (`Ltd`, `Limited`, `plc`) can push similar name
 | `LANGFUSE_PUBLIC_KEY` | No | Langfuse observability — token usage, cost, latency per Claude call |
 | `LANGFUSE_SECRET_KEY` | No | Langfuse observability — token usage, cost, latency per Claude call |
 | `LANGFUSE_HOST` | No | Defaults to `https://cloud.langfuse.com`; set for self-hosted |
+| `R2_ACCOUNT_ID` | No | Cloudflare account ID — enables R2 card image caching |
+| `R2_ACCESS_KEY_ID` | No | R2 API token access key |
+| `R2_SECRET_ACCESS_KEY` | No | R2 API token secret |
+| `R2_BUCKET_NAME` | No | R2 bucket name (e.g. `paidup`) |
+| `R2_PUBLIC_URL` | No | Public bucket URL e.g. `https://pub-xxxx.r2.dev` |
