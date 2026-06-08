@@ -12,9 +12,12 @@ from pathlib import Path
 import anthropic
 try:
     from langfuse.decorators import observe, langfuse_context
+    from langfuse import Langfuse
+    _langfuse_client = Langfuse()
     _LANGFUSE = True
 except ImportError:
     _LANGFUSE = False
+    _langfuse_client = None
     def observe(**_kw):
         def _dec(fn): return fn
         return _dec
@@ -154,6 +157,8 @@ def analyze(
         usage={"input": message.usage.input_tokens, "output": message.usage.output_tokens, "unit": "TOKENS"},
         metadata={"mp": mp_name, "prompt_key": prompt_key, "prompt_version": prompt_cfg["version"]},
     )
+    if _langfuse_client:
+        _langfuse_client.flush()
     return message.content[0].text
 
 
