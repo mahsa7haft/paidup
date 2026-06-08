@@ -12,7 +12,6 @@ from pathlib import Path
 import anthropic
 import logging as _logging
 try:
-    from langfuse.decorators import observe, langfuse_context
     from langfuse import Langfuse
     _langfuse_client = Langfuse() if (os.environ.get("LANGFUSE_PUBLIC_KEY") and os.environ.get("LANGFUSE_SECRET_KEY")) else None
     _LANGFUSE = _langfuse_client is not None
@@ -21,12 +20,6 @@ except Exception as _lf_exc:
     _logging.getLogger(__name__).warning("Langfuse disabled: %s", _lf_exc)
     _LANGFUSE = False
     _langfuse_client = None
-    def observe(**_kw):
-        def _dec(fn): return fn
-        return _dec
-    class _Ctx:
-        def update_current_observation(self, **_): pass
-    langfuse_context = _Ctx()
 
 PROMPTS_DIR = Path(__file__).parent / "prompts"
 
@@ -69,7 +62,6 @@ def _load_prompts() -> dict[str, dict]:
     return prompts
 
 
-@observe(name="analyze", as_type="generation")
 def analyze(
     mp_name: str,
     party: str,
@@ -148,6 +140,16 @@ def analyze(
         f"Declared financial interests:\n{interests_text}"
     )
 
+    generation = None
+    if _langfuse_client:
+        trace = _langfuse_client.trace(name="analyze", metadata={"mp": mp_name, "prompt_key": prompt_key})
+        generation = trace.generation(
+            name="claude-sonnet-4-6",
+            model="claude-sonnet-4-6",
+            input=user_message,
+            metadata={"prompt_version": prompt_cfg["version"]},
+        )
+
     client = anthropic.Anthropic(api_key=api_key)
     message = client.messages.create(
         model="claude-sonnet-4-6",
@@ -155,13 +157,14 @@ def analyze(
         system=prompt_cfg["system"] + _SHARED_RULES,
         messages=[{"role": "user", "content": user_message}],
     )
-    langfuse_context.update_current_observation(
-        model="claude-sonnet-4-6",
-        usage={"input": message.usage.input_tokens, "output": message.usage.output_tokens, "unit": "TOKENS"},
-        metadata={"mp": mp_name, "prompt_key": prompt_key, "prompt_version": prompt_cfg["version"]},
-    )
-    if _LANGFUSE:
-        langfuse_context.flush()
+
+    if generation:
+        generation.end(
+            output=message.content[0].text,
+            usage={"input": message.usage.input_tokens, "output": message.usage.output_tokens, "unit": "TOKENS"},
+        )
+        _langfuse_client.flush()
+
     return message.content[0].text
 
 
@@ -198,7 +201,6 @@ Rules:
 - If uncertain, return null."""
 
 
-@observe(name="resolve_person_to_company", as_type="generation")
 def resolve_person_to_company(donor_name: str) -> tuple[str | None, str | None]:
     """
     Ask Claude whether a donor name belongs to a known company owner/founder.
@@ -216,11 +218,6 @@ def resolve_person_to_company(donor_name: str) -> tuple[str | None, str | None]:
             system=_RESOLVE_PERSON_SYSTEM,
             messages=[{"role": "user", "content": donor_name}],
         )
-        langfuse_context.update_current_observation(
-            model="claude-haiku-4-5-20251001",
-            usage={"input": msg.usage.input_tokens, "output": msg.usage.output_tokens, "unit": "TOKENS"},
-            metadata={"donor_name": donor_name},
-        )
         raw = msg.content[0].text.strip()
         if not raw:
             return None, None
@@ -234,7 +231,6 @@ def resolve_person_to_company(donor_name: str) -> tuple[str | None, str | None]:
         return None, None
 
 
-@observe(name="resolve_company_domain", as_type="generation")
 def resolve_company_domain(company_name: str) -> str | None:
     """
     Ask Claude Haiku for the primary web domain of a company or organisation.
@@ -250,11 +246,6 @@ def resolve_company_domain(company_name: str) -> str | None:
             max_tokens=40,
             system=_RESOLVE_COMPANY_SYSTEM,
             messages=[{"role": "user", "content": company_name}],
-        )
-        langfuse_context.update_current_observation(
-            model="claude-haiku-4-5-20251001",
-            usage={"input": msg.usage.input_tokens, "output": msg.usage.output_tokens, "unit": "TOKENS"},
-            metadata={"company_name": company_name},
         )
         raw = msg.content[0].text.strip()
         if not raw:
