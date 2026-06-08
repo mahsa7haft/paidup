@@ -13,9 +13,9 @@ import anthropic
 try:
     from langfuse.decorators import observe, langfuse_context
     from langfuse import Langfuse
-    _langfuse_client = Langfuse()
-    _LANGFUSE = True
-except ImportError:
+    _langfuse_client = Langfuse() if (os.environ.get("LANGFUSE_PUBLIC_KEY") and os.environ.get("LANGFUSE_SECRET_KEY")) else None
+    _LANGFUSE = _langfuse_client is not None
+except Exception:
     _LANGFUSE = False
     _langfuse_client = None
     def observe(**_kw):
