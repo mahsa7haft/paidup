@@ -140,16 +140,6 @@ def analyze(
         f"Declared financial interests:\n{interests_text}"
     )
 
-    generation = None
-    if _langfuse_client:
-        trace = _langfuse_client.trace(name="analyze", metadata={"mp": mp_name, "prompt_key": prompt_key})
-        generation = trace.generation(
-            name="claude-sonnet-4-6",
-            model="claude-sonnet-4-6",
-            input=user_message,
-            metadata={"prompt_version": prompt_cfg["version"]},
-        )
-
     client = anthropic.Anthropic(api_key=api_key)
     message = client.messages.create(
         model="claude-sonnet-4-6",
@@ -157,15 +147,24 @@ def analyze(
         system=prompt_cfg["system"] + _SHARED_RULES,
         messages=[{"role": "user", "content": user_message}],
     )
+    result_text = message.content[0].text
 
-    if generation:
-        generation.end(
-            output=message.content[0].text,
-            usage={"input": message.usage.input_tokens, "output": message.usage.output_tokens, "unit": "TOKENS"},
-        )
-        _langfuse_client.flush()
+    if _langfuse_client:
+        try:
+            trace = _langfuse_client.trace(name="analyze", metadata={"mp": mp_name, "prompt_key": prompt_key})
+            trace.generation(
+                name="claude-sonnet-4-6",
+                model="claude-sonnet-4-6",
+                input=user_message,
+                output=result_text,
+                usage={"input": message.usage.input_tokens, "output": message.usage.output_tokens, "unit": "TOKENS"},
+                metadata={"prompt_version": prompt_cfg["version"]},
+            )
+            _langfuse_client.flush()
+        except Exception as lf_exc:
+            _logging.getLogger(__name__).warning("Langfuse trace failed: %s", lf_exc)
 
-    return message.content[0].text
+    return result_text
 
 
 _RESOLVE_PERSON_SYSTEM = """\
