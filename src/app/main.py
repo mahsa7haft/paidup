@@ -141,7 +141,10 @@ def analyze_mp():
     except ValueError as e:
         return jsonify({"error": str(e)}), 503
     except Exception as e:
-        return jsonify({"error": f"AI analysis failed: {e}"}), 500
+        msg = str(e)
+        if "401" in msg or "authentication" in msg.lower() or "invalid x-api-key" in msg.lower():
+            return jsonify({"error": "AI analysis is unavailable — API key not configured correctly."}), 503
+        return jsonify({"error": "AI analysis is temporarily unavailable. Please try again shortly."}), 500
 
 
 @app.route("/card/<int:member_id>")

@@ -205,7 +205,13 @@ def _fetch_logo(domain: str) -> Image.Image | None:
 
 
 def _fonts(sizes: list[int]) -> list[ImageFont.FreeTypeFont]:
-    for path in ["/System/Library/Fonts/Helvetica.ttc", "/System/Library/Fonts/Arial.ttf"]:
+    candidates = [
+        "/System/Library/Fonts/Helvetica.ttc",           # macOS
+        "/System/Library/Fonts/Arial.ttf",               # macOS fallback
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",  # Linux (Railway)
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",                  # Linux fallback
+    ]
+    for path in candidates:
         try:
             return [ImageFont.truetype(path, s) for s in sizes]
         except Exception:
