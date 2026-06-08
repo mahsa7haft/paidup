@@ -10,12 +10,15 @@ import os
 import re
 from pathlib import Path
 import anthropic
+import logging as _logging
 try:
     from langfuse.decorators import observe, langfuse_context
     from langfuse import Langfuse
     _langfuse_client = Langfuse() if (os.environ.get("LANGFUSE_PUBLIC_KEY") and os.environ.get("LANGFUSE_SECRET_KEY")) else None
     _LANGFUSE = _langfuse_client is not None
-except Exception:
+    _logging.getLogger(__name__).info("Langfuse initialised: %s", _LANGFUSE)
+except Exception as _lf_exc:
+    _logging.getLogger(__name__).warning("Langfuse disabled: %s", _lf_exc)
     _LANGFUSE = False
     _langfuse_client = None
     def observe(**_kw):
