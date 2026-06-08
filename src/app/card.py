@@ -204,20 +204,30 @@ def _fetch_logo(domain: str) -> Image.Image | None:
     return None
 
 
-def _fonts(sizes: list[int]) -> list[ImageFont.FreeTypeFont]:
-    candidates = [
-        "/System/Library/Fonts/Helvetica.ttc",           # macOS
-        "/System/Library/Fonts/Arial.ttf",               # macOS fallback
-        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",  # Linux (Railway)
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",                  # Linux fallback
+_FONTS_DIR = os.path.join(os.path.dirname(__file__), "fonts")
+_INTER_REGULAR  = os.path.join(_FONTS_DIR, "Inter-Regular.ttf")
+_INTER_MEDIUM   = os.path.join(_FONTS_DIR, "Inter-Medium.ttf")
+_INTER_SEMIBOLD = os.path.join(_FONTS_DIR, "Inter-SemiBold.ttf")
+
+
+def _font(size: int, weight: str = "regular") -> ImageFont.FreeTypeFont:
+    bundled = {"regular": _INTER_REGULAR, "medium": _INTER_MEDIUM, "semibold": _INTER_SEMIBOLD}
+    system = [
+        "/System/Library/Fonts/Helvetica.ttc",
+        "/System/Library/Fonts/Arial.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     ]
-    for path in candidates:
+    for path in [bundled.get(weight, _INTER_REGULAR)] + system:
         try:
-            return [ImageFont.truetype(path, s) for s in sizes]
+            return ImageFont.truetype(path, size)
         except Exception:
             pass
-    fb = ImageFont.load_default()
-    return [fb] * len(sizes)
+    return ImageFont.load_default()
+
+
+def _fonts(sizes: list[int]) -> list[ImageFont.FreeTypeFont]:
+    return [_font(s) for s in sizes]
 
 
 def _fmt(value: float) -> str:
@@ -524,9 +534,13 @@ def generate_card(member_id: int, name: str, interests: list[dict],
     card = Image.new("RGB", (CARD_W, CARD_H), CREAM)
     draw = ImageDraw.Draw(card)
 
-    (font_name_lg, font_party, font_total, font_sub,
-     font_badge_val, font_badge_name,
-     font_dim) = _fonts([24, 14, 32, 13, 13, 11, 11])
+    font_name_lg   = _font(28, "semibold")
+    font_party     = _font(15, "semibold")
+    font_total     = _font(40, "semibold")
+    font_sub       = _font(16, "regular")
+    font_badge_val = _font(14, "medium")
+    font_badge_name= _font(12, "regular")
+    font_dim       = _font(13, "regular")
 
     # ── Photo ──
     photo = _fetch_photo(member_id)
