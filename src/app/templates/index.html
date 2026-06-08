@@ -241,7 +241,6 @@
   <p id="error" class="error"></p>
 
   <div id="result">
-    <div class="tag-row" id="mp-tags"></div>
 
     <div class="card-wrap" id="card-wrap">
       <div class="card-loading" id="card-loading">
@@ -463,16 +462,6 @@
     }
 
     function renderSummary(data) {
-      const tags = document.getElementById('mp-tags');
-      tags.innerHTML = '';
-      const addTag = (label, cls = '') => {
-        const t = document.createElement('span');
-        t.className = 'tag' + (cls ? ' ' + cls : '');
-        t.textContent = label;
-        tags.appendChild(t);
-      };
-      (data.committees || []).slice(0, 4).forEach(c => addTag(c));
-
       // Reset overlay + start card loading animation
       _badgeLayout = null;
       _cardImgReady = false;
