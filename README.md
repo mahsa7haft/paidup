@@ -31,12 +31,14 @@ Search any MP by name and instantly see their declared financial interests — d
 | AI — analysis | Anthropic Claude Sonnet (analysis reports) |
 | AI — donor resolution | Anthropic Claude Haiku (company/person → domain lookup, ~$0.001/call) |
 | Logos | Google Favicons API (no auth, works for any domain) |
-| Image generation | Pillow |
+| Image generation | Pillow (Inter font bundled) |
 | Web framework | Flask |
 | Caching L1 | Redis (Parliament lookups 1h, AI results 24h) |
 | Caching L2 | PostgreSQL (AI results 28 days, donor links permanent) |
+| Card CDN | Cloudflare R2 (generated cards cached monthly, served from edge) |
 | Package manager | uv |
 | Observability | Langfuse (token usage, cost, latency per Claude call) |
+| Deployment | Railway (auto-deploy from GitHub, Postgres + Redis plugins) |
 
 ## Data Sources
 
@@ -258,20 +260,19 @@ In your Railway project, go to **Variables** and add:
 | `THEYWORKFORYOU_API_KEY` | Your TheyWorkForYou key (optional) |
 | `FLASK_SECRET_KEY` | Any long random string |
 | `REDIS_URL` | Set automatically by the Railway Redis plugin (see below) |
+| `DATABASE_URL` | Set automatically by the Railway Postgres plugin (see below) |
 | `PORT` | Railway sets this automatically — do not override |
 | `LANGFUSE_PUBLIC_KEY` | Optional — Langfuse observability ([cloud.langfuse.com](https://cloud.langfuse.com)) |
 | `LANGFUSE_SECRET_KEY` | Optional — Langfuse observability |
+| `R2_ACCOUNT_ID` | Optional — Cloudflare account ID (enables card CDN caching) |
+| `R2_ACCESS_KEY_ID` | Optional — R2 API token access key |
+| `R2_SECRET_ACCESS_KEY` | Optional — R2 API token secret |
+| `R2_BUCKET_NAME` | Optional — R2 bucket name (e.g. `paidup`) |
+| `R2_PUBLIC_URL` | Optional — public bucket URL e.g. `https://pub-xxxx.r2.dev` |
 
-### 4. Set the start command
+### 4. Start command
 
-In Railway, go to **Settings → Deploy** and set the start command to:
-
-```
-PYTHONPATH=src python -m app.main
-```
-
-> If Railway uses `uv`, the command would be:
-> `PYTHONPATH=src uv run python -m app.main`
+The `railway.toml` in the repo root configures the start command automatically — no manual setup needed.
 
 ### 5. Add Postgres (recommended)
 
@@ -382,11 +383,13 @@ paidup/
 │       ├── parliament.py        # UK Parliament API client
 │       ├── theyworkforyou.py    # TheyWorkForYou API client
 │       ├── ai.py                # Claude AI analysis + donor company resolver (Haiku)
-│       ├── card.py              # Donor card image generator (Pillow, brand F design)
+│       ├── card.py              # Donor card image generator (Pillow, Inter font)
+│       ├── r2.py                # Cloudflare R2 card image cache (CDN upload/lookup)
 │       ├── database.py          # PostgreSQL layer — analysis cache + donor_company_links + donor_tags
 │       ├── cache.py             # Redis wrapper (L1 cache)
 │       ├── text_utils.py        # Shared name normalisation + TF-IDF fuzzy matching
 │       ├── seed_tags.py         # CLI: sync data/donor_tags.csv into donor_tags table
+│       ├── fonts/               # Bundled Inter typeface (Regular, Medium, SemiBold)
 │       ├── prompts/             # Versioned AI prompt files
 │       │   ├── summary_v1.txt
 │       │   ├── investigative_v1.txt
@@ -401,6 +404,7 @@ paidup/
 │   ├── test_card_badges.py
 │   ├── test_database_links.py
 │   └── test_ai_resolve.py
+├── railway.toml                 # Railway deployment config (start command, health check)
 ├── pyproject.toml
 ├── .env.example
 └── uv.lock
@@ -470,12 +474,13 @@ See the [GitHub Issues](https://github.com/mahsa7haft/paidup/issues) board for t
 | # | Title |
 |---|---|
 | [#8](https://github.com/mahsa7haft/paidup/issues/8) | Party logos on card instead of party name text |
-| [#13](https://github.com/mahsa7haft/paidup/issues/13) | Cache generated card images in Cloudflare R2 |
-| [#16](https://github.com/mahsa7haft/paidup/issues/16) | Sticky search — keep search bar accessible while a card is open |
-| [#21](https://github.com/mahsa7haft/paidup/issues/21) | Move Open Donor Analysis button to the declared interests section |
-| [#24](https://github.com/mahsa7haft/paidup/issues/24) | Add Claude/Anthropic as a data source; AI reports should cite their sources |
-| [#25](https://github.com/mahsa7haft/paidup/issues/25) | Verify company logos render correctly on Railway (Google Favicons) |
-| [#26](https://github.com/mahsa7haft/paidup/issues/26) | Improve person badge readability at smaller sizes |
+| [#22](https://github.com/mahsa7haft/paidup/issues/22) | Exclude Unknown donors from declared donor count and interests table |
+| [#23](https://github.com/mahsa7haft/paidup/issues/23) | Company logos not rendering on donor badges |
+| [#24](https://github.com/mahsa7haft/paidup/issues/24) | Add Claude/Anthropic as data source; AI reports should cite sources |
+| [#25](https://github.com/mahsa7haft/paidup/issues/25) | Clearbit logos not rendering despite correct domains in DB |
+| [#33](https://github.com/mahsa7haft/paidup/issues/33) | Transparency: add AI usage and environmental impact page |
+| [#34](https://github.com/mahsa7haft/paidup/issues/34) | Company logo badges not visually proportional to donation amount |
+| [#37](https://github.com/mahsa7haft/paidup/issues/37) | Epic: share MP donor card on social media |
 
 ## Roadmap
 
