@@ -557,9 +557,9 @@ def generate_card(member_id: int, name: str, interests: list[dict],
 
     draw.text((rx, ry), name, fill=TEXT_DARK, font=font_name_lg)
     ry += 30
-    if title:
-        draw.text((rx, ry), title, fill=TEXT_MID, font=font_sub)
-        ry += 20
+    for role in [r for r in title.split("|") if r]:
+        draw.text((rx, ry), role, fill=TEXT_MID, font=font_dim)
+        ry += 15
     ry += 4
 
     if party:
@@ -606,9 +606,10 @@ def generate_card(member_id: int, name: str, interests: list[dict],
     draw.text((rx, ry), count_str, fill=TEXT_MID, font=font_sub)
     ry += 20
     draw.text((rx, ry), "Badge size = total donated", fill=TEXT_DIM, font=font_dim)
+    ry += 20
 
     if date_from and date_to:
-        draw.text((rx, CARD_H - 16), f"Data covers {date_from} to {date_to}",
-                  fill=TEXT_DIM, font=font_dim, anchor="ls")
+        draw.text((rx, ry), f"Data covers {date_from} to {date_to}",
+                  fill=TEXT_DIM, font=font_dim)
 
     return card

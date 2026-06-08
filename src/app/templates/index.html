@@ -491,7 +491,8 @@
       cardImg.onerror = () => { _stopCardLoading(); };
 
       const party = encodeURIComponent(data.party || '');
-      const title = encodeURIComponent((data.govt_posts || [])[0] || '');
+      const allPosts = [...(data.govt_posts || []), ...(data.other_posts || [])];
+      const title = encodeURIComponent(allPosts.join('|') || '');
       cardImg.src = `/card/${data.id}?name=${encodeURIComponent(data.name)}&party=${party}&title=${title}`;
       _fetchBadgeLayout(data.id);
 
