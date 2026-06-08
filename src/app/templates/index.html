@@ -241,7 +241,6 @@
   <p id="error" class="error"></p>
 
   <div id="result">
-    <div class="date-range" id="mp-date-range"></div>
     <div class="tag-row" id="mp-tags"></div>
 
     <div class="card-wrap" id="card-wrap">
@@ -464,10 +463,6 @@
     }
 
     function renderSummary(data) {
-      const dr = document.getElementById('mp-date-range');
-      dr.textContent = data.oldest && data.newest
-        ? `Data covers ${data.oldest} to ${data.newest}` : '';
-
       const tags = document.getElementById('mp-tags');
       tags.innerHTML = '';
       const addTag = (label, cls = '') => {
@@ -476,8 +471,6 @@
         t.textContent = label;
         tags.appendChild(t);
       };
-      (data.govt_posts || []).forEach(p => addTag(p, 'govt'));
-      (data.opposition_posts || []).forEach(p => addTag(p, 'govt'));
       (data.committees || []).slice(0, 4).forEach(c => addTag(c));
 
       // Reset overlay + start card loading animation
