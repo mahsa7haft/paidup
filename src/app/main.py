@@ -27,6 +27,39 @@ app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret")
 db.ensure_tables()
 
 
+_mp_list_cache: list[dict] | None = None
+
+
+def _get_mp_list() -> list[dict]:
+    global _mp_list_cache
+    if _mp_list_cache is not None:
+        return _mp_list_cache
+    import requests as _req
+    mps, skip = [], 0
+    while True:
+        data = _req.get(
+            "https://members-api.parliament.uk/api/Members/Search",
+            params={"House": 1, "IsCurrentMember": "true", "take": 100, "skip": skip},
+            timeout=10,
+        ).json()
+        items = data.get("items", [])
+        if not items:
+            break
+        for m in items:
+            v = m["value"]
+            mps.append({"id": v["id"], "name": v["nameDisplayAs"], "party": v["latestParty"]["name"]})
+        skip += len(items)
+        if skip >= data.get("totalResults", 0):
+            break
+    _mp_list_cache = mps
+    return mps
+
+
+@app.route("/members")
+def members():
+    return jsonify(_get_mp_list())
+
+
 @app.route("/")
 def index():
     return render_template("index.html", prompt_options=prompt_options())
