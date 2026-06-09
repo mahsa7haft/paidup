@@ -23,6 +23,10 @@
     button.primary:hover { background: #178a64; }
     button.primary:disabled { opacity: 0.5; cursor: wait; }
     .error { color: #c0392b; margin-top: 1rem; font-size: 0.9rem; }
+    #ac-list { display:none; position:absolute; top:100%; left:0; width:calc(100% - 100px); max-height:240px; overflow-y:auto; background:#fff; border:1.5px solid #c8c0b0; border-top:none; border-radius:0 0 6px 6px; list-style:none; z-index:50; margin:0; padding:0; }
+    #ac-list li { padding:0.55rem 1rem; cursor:pointer; font-size:0.95rem; color:#1a1a1a; }
+    #ac-list li:hover, #ac-list li.ac-active { background:#f0ebe0; }
+    #ac-list li span.ac-party { color:#999; font-size:0.78rem; margin-left:0.5rem; }
 
     /* Results summary */
     #result { margin-top: 2rem; display: none; max-width: 800px; }
@@ -236,9 +240,10 @@
   </div>
   <p class="sub">See who funds UK politicians.</p>
 
-  <div class="search">
-    <input id="name" type="text" placeholder="Enter an MP's name…" />
+  <div class="search" style="position:relative">
+    <input id="name" type="text" placeholder="Enter an MP's name…" autocomplete="off" />
     <button class="primary" id="submit">Look up</button>
+    <ul id="ac-list"></ul>
   </div>
   <p id="error" class="error"></p>
 
@@ -347,8 +352,88 @@
     const drawer = document.getElementById('drawer');
     const overlay = document.getElementById('overlay');
     const analyseBtn = document.getElementById('analyse-btn');
+    const acList = document.getElementById('ac-list');
 
     let currentMp = null;
+
+    // ── Autocomplete ─────────────────────────────────────────────────────────
+    let _mpList = null;
+    let _acActive = -1;
+
+    fetch('/members').then(r => r.json()).then(data => { _mpList = data; });
+
+    function _acShow(items) {
+      acList.innerHTML = items.map((mp, i) =>
+        `<li data-name="${mp.name}" class="${i === _acActive ? 'ac-active' : ''}">${mp.name}<span class="ac-party">${mp.party}</span></li>`
+      ).join('');
+      acList.style.display = items.length ? 'block' : 'none';
+      _acActive = -1;
+    }
+
+    function _acHide() { acList.style.display = 'none'; _acActive = -1; }
+
+    function _acSelect(name) {
+      input.value = name;
+      _acHide();
+      lookup();
+    }
+
+    function _acMatch(name, q) {
+      const n = name.toLowerCase();
+      if (n.includes(q)) return 2;  // exact substring — highest priority
+      // Fuzzy: check if all chars of q appear in order in n (handles misspellings)
+      let ni = 0, qi = 0;
+      while (ni < n.length && qi < q.length) {
+        if (n[ni] === q[qi]) qi++;
+        ni++;
+      }
+      if (qi === q.length) return 1;
+      // Partial word match — any word in name starts with any word in q
+      const qWords = q.split(' ').filter(Boolean);
+      const nWords = n.split(' ');
+      if (qWords.every(qw => nWords.some(nw => nw.startsWith(qw)))) return 2;
+      return 0;
+    }
+
+    input.addEventListener('input', () => {
+      const q = input.value.trim().toLowerCase();
+      if (!_mpList || q.length < 2) { _acHide(); return; }
+      const matches = _mpList
+        .map(mp => ({ mp, score: _acMatch(mp.name, q) }))
+        .filter(x => x.score > 0)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 8)
+        .map(x => x.mp);
+      _acShow(matches);
+    });
+
+    input.addEventListener('keydown', e => {
+      const items = acList.querySelectorAll('li');
+      if (!items.length) return;
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        _acActive = Math.min(_acActive + 1, items.length - 1);
+        items.forEach((li, i) => li.classList.toggle('ac-active', i === _acActive));
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        _acActive = Math.max(_acActive - 1, -1);
+        items.forEach((li, i) => li.classList.toggle('ac-active', i === _acActive));
+      } else if (e.key === 'Enter' && _acActive >= 0) {
+        e.preventDefault();
+        _acSelect(items[_acActive].dataset.name);
+      } else if (e.key === 'Escape') {
+        _acHide();
+      }
+    });
+
+    acList.addEventListener('click', e => {
+      const li = e.target.closest('li');
+      if (li) _acSelect(li.dataset.name);
+    });
+
+    document.addEventListener('click', e => {
+      if (!e.target.closest('.search')) _acHide();
+    });
 
     // ── Badge overlay ─────────────────────────────────────────────────────────
     let _badgeLayout = null;
