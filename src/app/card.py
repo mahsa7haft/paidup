@@ -247,11 +247,18 @@ def _badge_radius(value: float, max_value: float,
     return int(min_r + (max_r - min_r) * math.sqrt(value / max_value))
 
 
+_TITLE_WORDS = {"mr", "mrs", "ms", "miss", "dr", "prof", "lord", "lady", "sir",
+                "dame", "baroness", "baron", "earl", "viscount", "rt", "hon", "the"}
+_SKIP_WORDS  = {"the", "of", "and", "&", "ltd", "plc", "limited", "group", "trust",
+                "holdings", "company", "services", "international"}
+
+
 def _initials(name: str) -> str:
-    skip = {"the", "of", "and", "&", "ltd", "plc", "limited", "group", "trust",
-            "holdings", "company", "services", "international"}
+    # Strip "of <place>" suffix common in noble titles e.g. "Lord X of Turville"
+    name = re.sub(r"\s+of\s+\S+.*$", "", name, flags=re.IGNORECASE).strip()
     clean_words = [re.sub(r"[^a-zA-Z0-9]", "", w) for w in name.split()]
-    words = [w for w in clean_words if w and w.lower() not in skip]
+    # Drop titles and common skip words
+    words = [w for w in clean_words if w and w.lower() not in _TITLE_WORDS | _SKIP_WORDS]
     if len(words) >= 2:
         return (words[0][0] + words[-1][0]).upper()
     if words:
@@ -275,10 +282,30 @@ def _aggregate(interests: list[dict]) -> list[tuple[str, float]]:
     return result
 
 
+_CORPORATE_WORDS = re.compile(
+    r"\b(football|hotel|hotels|events|media|capital|management|investments?|"
+    r"properties|property|solutions|consulting|consultancy|associates|ventures?|"
+    r"industries|enterprises?|holdings|services|systems|technologies|charity|"
+    r"foundation|trust|council|committee|party|union|club|bank|insurance|"
+    r"theatre|theater|gallery|museum|institute|academy|college|university|"
+    r"national|royal|british|english|scottish|welsh|london|press|publishing)\b",
+    re.IGNORECASE,
+)
+
+
 def _is_person(name: str) -> bool:
     if _COMPANY_SUFFIXES.search(name):
         return False
-    return bool(_PERSON_PREFIXES.match(name.strip()))
+    if _CORPORATE_WORDS.search(name):
+        return False
+    if _PERSON_PREFIXES.match(name.strip()):
+        return True
+    # Heuristic: 2–3 capitalised words with no digits = likely a person name
+    clean = re.sub(r"\(.*?\)", "", name).strip()
+    words = clean.split()
+    if 2 <= len(words) <= 3 and all(w[0].isupper() for w in words if w) and not any(c.isdigit() for c in clean):
+        return True
+    return False
 
 
 def _classify_donor(name: str) -> tuple[str, str | None]:
@@ -374,11 +401,9 @@ def _layout_badges(interests: list[dict],
         if needed <= zone_h:
             opt_max_r = r
             break
-    opt_min_r = max(MIN_R, opt_max_r - 8)
-
     max_val = max(v for _, v in donors if v > 0) or 1
     sized = sorted(
-        [(dn, v, _badge_radius(v, max_val, min_r=opt_min_r, max_r=opt_max_r))
+        [(dn, v, _badge_radius(v, max_val, min_r=MIN_R, max_r=opt_max_r))
          for dn, v in donors],
         key=lambda x: x[2], reverse=True,
     )
@@ -423,12 +448,11 @@ def _draw_company_logo_badge(img: Image.Image, draw: ImageDraw.ImageDraw,
                               font_val: ImageFont.FreeTypeFont,
                               font_name: ImageFont.FreeTypeFont) -> None:
     logo = _fetch_logo(domain)
-    if logo:
-        logo_size = r * 2
-        logo = logo.resize((logo_size, logo_size), Image.LANCZOS)
-        img.paste(logo, (cx - logo_size // 2, cy - logo_size // 2), logo)
-    else:
-        _draw_anonymous_badge(draw, cx, cy, r, value, font_val, font_name, show_q=False)
+    label = _stamp_label(name, is_company=True)
+    stamp = _make_stamp(r, label, logo=logo)
+    img_rgba = img.convert("RGBA")
+    img_rgba.paste(stamp, (cx - r, cy - r), stamp)
+    img.paste(img_rgba.convert("RGB"), (0, 0))
 
 
 def _draw_company_initials_badge(draw: ImageDraw.ImageDraw,
@@ -476,52 +500,115 @@ def _person_silhouette(draw: ImageDraw.ImageDraw,
     draw.polygon(pts, fill=color, outline=outline, width=ow)
 
 
-def _draw_person_badge(draw: ImageDraw.ImageDraw,
+STAMP_RED = "#c0272d"
+_STAMP_SIZE = 200
+
+
+_COMPANY_GENERIC = {"football", "club", "events", "group", "holdings", "services",
+                    "international", "industries", "enterprises", "ventures", "associates"}
+
+
+def _stamp_label(name: str, is_company: bool = False) -> str:
+    """Return a short label for the stamp banner."""
+    if not name:
+        return "SPONSOR"
+    clean = re.sub(r"\s+of\s+\S+.*$", "", name, flags=re.IGNORECASE).strip()
+    skip = _TITLE_WORDS | _SKIP_WORDS | _COMPANY_GENERIC
+    words = [w for w in clean.split() if re.sub(r"[^a-zA-Z]", "", w).lower() not in skip]
+    if not words:
+        return "SPONSOR"
+    if is_company:
+        # Use first meaningful word — the brand name e.g. "Arsenal", "OPD", "Penpole"
+        return words[0]
+    if len(words) == 1:
+        return words[0]
+    # Person: first initial + surname e.g. "D.Sainsbury"
+    return f"{words[0][0]}.{words[-1]}"
+
+
+def _make_stamp(r: int, label: str = "SPONSOR", logo: "Image.Image | None" = None) -> Image.Image:
+    """Rubber seal stamp: two rings, stars between rings, label banner or logo in centre."""
+    import math
+    s = _STAMP_SIZE
+    img = Image.new("RGBA", (s, s), (0, 0, 0, 0))
+    d   = ImageDraw.Draw(img)
+    cx = cy = s // 2
+
+    outer_r = cx - 6
+    inner_r = cx - 26
+
+    # Outer ring
+    d.ellipse([cx-outer_r, cy-outer_r, cx+outer_r, cy+outer_r], fill=None, outline=STAMP_RED, width=8)
+    # Inner ring
+    d.ellipse([cx-inner_r, cy-inner_r, cx+inner_r, cy+inner_r], fill=None, outline=STAMP_RED, width=3)
+
+    # Stars between the two rings (evenly spaced)
+    star_r = (outer_r + inner_r) // 2
+    star_font = _font(18, "semibold")
+    n_stars = 8
+    for i in range(n_stars):
+        angle = math.radians(i * 360 / n_stars - 90)
+        sx = cx + int(star_r * math.cos(angle))
+        sy = cy + int(star_r * math.sin(angle))
+        d.text((sx, sy), "★", fill=STAMP_RED, font=star_font, anchor="mm")
+
+    if logo is not None:
+        # Scale logo to fit inside inner ring
+        logo_size = int(inner_r * 1.5)
+        scaled_logo = logo.resize((logo_size, logo_size), Image.LANCZOS).convert("RGBA")
+        img.paste(scaled_logo, (cx - logo_size // 2, cy - logo_size // 2), scaled_logo)
+    else:
+        # Banner — sized to fit within inner ring diameter
+        max_banner_w = inner_r * 2 - 8
+        banner_font = _font(28, "semibold")
+        bb = d.textbbox((0, 0), label, font=banner_font)
+        tw, th = bb[2]-bb[0], bb[3]-bb[1]
+        if tw > max_banner_w:
+            banner_font = _font(22, "semibold")
+            bb = d.textbbox((0, 0), label, font=banner_font)
+            tw, th = bb[2]-bb[0], bb[3]-bb[1]
+        if tw > max_banner_w:
+            banner_font = _font(18, "semibold")
+            bb = d.textbbox((0, 0), label, font=banner_font)
+            tw, th = bb[2]-bb[0], bb[3]-bb[1]
+        pad_x = 8
+        bw = tw + pad_x * 2
+        bh = th + 12
+        banner_img = Image.new("RGBA", (bw, bh), (0, 0, 0, 0))
+        bd = ImageDraw.Draw(banner_img)
+        bd.rectangle([0, 0, bw-1, bh-1], fill=STAMP_RED)
+        text_y = (bh - th) // 2 - bb[1]
+        bd.text((pad_x, text_y), label, fill="white", font=banner_font)
+        rotated = banner_img.rotate(-8, expand=True)
+        bx = cx - rotated.width // 2
+        by = cy - rotated.height // 2
+        img.paste(rotated, (bx, by), rotated)
+
+    return img.resize((r * 2, r * 2), Image.LANCZOS)
+
+
+def _draw_person_badge(img: Image.Image, draw: ImageDraw.ImageDraw,
                         cx: int, cy: int, r: int,
                         name: str, value: float,
                         font_val: ImageFont.FreeTypeFont,
                         font_name: ImageFont.FreeTypeFont) -> None:
-    """Brand-green silhouette on the suit with white outline for contrast on dark fabric."""
-    head_r  = max(4, int(r * 0.25))
-    head_cy = cy - int(r * 0.27)
-    _person_silhouette(draw, cx, head_cy, head_r, BRAND_GREEN, outline="white")
+    """Rubber-seal stamp — brand name for companies, abbreviated name for persons."""
+    is_co = not _is_person(name) and bool(name)
+    label = _stamp_label(name, is_company=is_co) if name else "SPONSOR"
+    stamp = _make_stamp(r, label)
+    img_rgba = img.convert("RGBA")
+    img_rgba.paste(stamp, (cx - r, cy - r), stamp)
+    img.paste(img_rgba.convert("RGB"), (0, 0))
 
 
-def _draw_anonymous_badge(draw: ImageDraw.ImageDraw,
+def _draw_anonymous_badge(img: Image.Image, draw: ImageDraw.ImageDraw,
                           cx: int, cy: int, r: int,
                           value: float,
                           font_val: ImageFont.FreeTypeFont,
                           font_name: ImageFont.FreeTypeFont,
                           show_q: bool = True) -> None:
-    """
-    Ghost figure (light grey, offset) behind a brand-green foreground figure.
-    show_q=True  → white '?' on the head (unknown/unnamed payer).
-    show_q=False → no mark (named donor with no logo).
-    """
-    head_r  = max(4, int(r * 0.25))
-    head_cy = cy - int(r * 0.27)
-
-    if r >= 26:
-        g_hr  = max(3, int(head_r * 0.80))
-        g_cx  = cx + int(r * 0.14)
-        g_cy  = head_cy - int(r * 0.06)
-        _person_silhouette(draw, g_cx, g_cy, g_hr, "#c0c0c0")
-        fg_cx = cx - int(r * 0.07)
-    else:
-        fg_cx = cx
-
-    _person_silhouette(draw, fg_cx, head_cy, head_r, BRAND_GREEN, outline="white")
-
-    if show_q:
-        q_size = max(8, int(head_r * 1.3))
-        qfont  = font_name
-        for path in ["/System/Library/Fonts/Helvetica.ttc", "/System/Library/Fonts/Arial.ttf"]:
-            try:
-                qfont = ImageFont.truetype(path, q_size)
-                break
-            except Exception:
-                pass
-        draw.text((fg_cx, head_cy), "?", fill="white", font=qfont, anchor="mm")
+    """Sponsor stamp for anonymous/unnamed donors — always shows SPONSOR."""
+    _draw_person_badge(img, draw, cx, cy, r, "", value, font_val, font_name)
 
 
 
@@ -562,15 +649,16 @@ def generate_card(member_id: int, name: str, interests: list[dict],
         badge_type, domain = badge["badge_type"], badge["domain"]
         fv = font_badge_val if r >= 22 else font_badge_name
         fn = font_badge_name
-        if badge_type == "anonymous":
-            _draw_anonymous_badge(draw, cx, cy, r, dval, fv, fn, show_q=True)
-        elif badge_type == "company_logo" and domain:
+        if badge_type == "company_logo" and domain:
             _draw_company_logo_badge(card, draw, cx, cy, r, dname, dval, domain, fv, fn)
-        elif badge_type == "person":
-            _draw_person_badge(draw, cx, cy, r, dname, dval, fv, fn)
+        elif badge_type == "company_initials":
+            # Company with no logo — stamp with company name
+            _draw_person_badge(card, draw, cx, cy, r, dname, dval, fv, fn)
+            draw = ImageDraw.Draw(card)
         else:
-            # Named donor with no logo — same silhouette as anonymous but no '?'
-            _draw_anonymous_badge(draw, cx, cy, r, dval, fv, fn, show_q=False)
+            # person or anonymous — stamp with name or SPONSOR
+            _draw_person_badge(card, draw, cx, cy, r, dname if dname != "Unknown" else "", dval, fv, fn)
+            draw = ImageDraw.Draw(card)
 
     # ── Right panel ──
     rx, ry = PHOTO_W + 28, 30
