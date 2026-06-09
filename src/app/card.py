@@ -282,10 +282,30 @@ def _aggregate(interests: list[dict]) -> list[tuple[str, float]]:
     return result
 
 
+_CORPORATE_WORDS = re.compile(
+    r"\b(football|hotel|hotels|events|media|capital|management|investments?|"
+    r"properties|property|solutions|consulting|consultancy|associates|ventures?|"
+    r"industries|enterprises?|holdings|services|systems|technologies|charity|"
+    r"foundation|trust|council|committee|party|union|club|bank|insurance|"
+    r"theatre|theater|gallery|museum|institute|academy|college|university|"
+    r"national|royal|british|english|scottish|welsh|london|press|publishing)\b",
+    re.IGNORECASE,
+)
+
+
 def _is_person(name: str) -> bool:
     if _COMPANY_SUFFIXES.search(name):
         return False
-    return bool(_PERSON_PREFIXES.match(name.strip()))
+    if _CORPORATE_WORDS.search(name):
+        return False
+    if _PERSON_PREFIXES.match(name.strip()):
+        return True
+    # Heuristic: 2–3 capitalised words with no digits = likely a person name
+    clean = re.sub(r"\(.*?\)", "", name).strip()
+    words = clean.split()
+    if 2 <= len(words) <= 3 and all(w[0].isupper() for w in words if w) and not any(c.isdigit() for c in clean):
+        return True
+    return False
 
 
 def _classify_donor(name: str) -> tuple[str, str | None]:

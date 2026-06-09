@@ -229,7 +229,7 @@ def resolve_person_to_company(donor_name: str) -> tuple[str | None, str | None]:
         if not raw:
             return None, None
         # Strip accidental markdown fences if the model ignores instructions
-        raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw, flags=re.DOTALL).strip()
+        raw = re.sub(r"^[^{]*({.*})[^}]*$", r"\1", raw, flags=re.DOTALL).strip()
         data = json.loads(raw)
         return data.get("company_name"), data.get("domain")
     except Exception as exc:
@@ -257,7 +257,7 @@ def resolve_company_domain(company_name: str) -> str | None:
         raw = msg.content[0].text.strip()
         if not raw:
             return None
-        raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw, flags=re.DOTALL).strip()
+        raw = re.sub(r"^[^{]*({.*})[^}]*$", r"\1", raw, flags=re.DOTALL).strip()
         data = json.loads(raw)
         return data.get("domain")
     except Exception as exc:
