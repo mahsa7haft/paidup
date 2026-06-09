@@ -201,7 +201,7 @@
 
     /* Page footer — data sources */
     #page-footer {
-      display: none;
+      display: block;
       border-top: 1px solid #d8d0c4;
       background: #e8e3d8;
       margin-top: 3rem;
@@ -279,7 +279,29 @@
   <footer id="page-footer">
     <div class="footer-inner">
       <span class="footer-label">Data sources</span>
-      <div class="footer-sources" id="footer-sources-list"></div>
+      <div class="footer-sources">
+        <div class="footer-source-row">
+          <span class="sl-label">Financial interests data</span>
+          <a href="https://interests-api.parliament.uk" target="_blank" rel="noopener">UK Parliament Register of Members' Financial Interests</a>
+        </div>
+        <div class="footer-source-row">
+          <span class="sl-label">MP photos</span>
+          <a href="https://members.parliament.uk" target="_blank" rel="noopener">UK Parliament Members API — © Crown Copyright</a>
+        </div>
+        <div class="footer-source-row">
+          <span class="sl-label">Company logos</span>
+          <a href="https://developers.google.com/search/docs/appearance/favicon-in-search" target="_blank" rel="noopener">Google Favicons API</a>
+        </div>
+        <div class="footer-source-row">
+          <span class="sl-label">Donor badge resolution</span>
+          <a href="https://www.anthropic.com" target="_blank" rel="noopener">Claude Haiku (Anthropic) — AI lookup of donor → company links</a>
+        </div>
+        <div class="footer-source-row">
+          <span class="sl-label">AI analysis</span>
+          <a href="https://www.anthropic.com" target="_blank" rel="noopener">Claude Sonnet (Anthropic) — AI interpretation of declared data, not verified fact</a>
+        </div>
+      </div>
+      <div class="footer-sources" id="footer-sources-list" style="margin-top:0.6rem;padding-top:0.6rem;border-top:1px solid #e8e0d4;display:none"></div>
     </div>
   </footer>
 
@@ -444,7 +466,7 @@
       submitBtn.disabled = true;
       err.textContent = '';
       result.style.display = 'none';
-      document.getElementById('page-footer').style.display = 'none';
+      document.getElementById('footer-sources-list').style.display = 'none';
 
       try {
         const res = await fetch('/lookup', {
@@ -560,20 +582,23 @@
 
     function renderSources(sources) {
       const SOURCE_LABELS = {
-        parliament_member: 'Parliament member page',
-        interests_register: 'Register of Members\' Financial Interests',
+        parliament_member: 'MP profile page',
         twfy_profile: 'TheyWorkForYou profile',
         appg_register: 'APPG Register',
       };
+      const SKIP = new Set(['interests_register']);
       const el = document.getElementById('footer-sources-list');
-      el.innerHTML = Object.entries(sources)
-        .filter(([, url]) => url)
+      const rows = Object.entries(sources)
+        .filter(([key, url]) => url && !SKIP.has(key))
         .map(([key, url]) => `
           <div class="footer-source-row">
             <span class="sl-label">${SOURCE_LABELS[key] || key}</span>
             <a href="${url}" target="_blank" rel="noopener">${url}</a>
           </div>`).join('');
-      document.getElementById('page-footer').style.display = 'block';
+      if (rows) {
+        el.innerHTML = rows;
+        el.style.display = 'block';
+      }
     }
 
     analyseBtn.addEventListener('click', async () => {
