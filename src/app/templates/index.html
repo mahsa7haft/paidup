@@ -216,7 +216,7 @@
 
     /* Page footer — data sources */
     #page-footer {
-      display: block;
+      display: none;
       border-top: 1px solid #d8d0c4;
       background: #e8e3d8;
       margin-top: 3rem;
@@ -575,6 +575,7 @@
         currentMp = data;
         renderSummary(data);
         result.style.display = 'block';
+        document.getElementById('page-footer').style.display = 'block';
       } catch (e) {
         err.textContent = e.message;
       } finally {
