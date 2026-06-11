@@ -236,6 +236,15 @@
     .footer-source-row .sl-label { color: #888; min-width: 220px; flex-shrink: 0; }
     .footer-source-row a { color: #1D9E75; text-decoration: none; }
     .footer-source-row a:hover { text-decoration: underline; }
+    @media (max-width: 600px) {
+      .footer-label { cursor: pointer; user-select: none; }
+      .footer-label::after { content: ' ▸'; font-size: 0.65rem; }
+      .footer-label.open::after { content: ' ▾'; }
+      .footer-sources { display: none; }
+      .footer-sources.open { display: flex; }
+      .footer-source-row { flex-direction: column; gap: 0.15rem; }
+      .footer-source-row .sl-label { min-width: unset; }
+    }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
@@ -294,8 +303,8 @@
 
   <footer id="page-footer">
     <div class="footer-inner">
-      <span class="footer-label">Data sources</span>
-      <div class="footer-sources">
+      <span class="footer-label" id="footer-toggle">Data sources</span>
+      <div class="footer-sources" id="footer-sources-body">
         <div class="footer-source-row">
           <span class="sl-label">Financial interests data</span>
           <a href="https://interests-api.parliament.uk" target="_blank" rel="noopener">UK Parliament Register of Members' Financial Interests</a>
@@ -317,7 +326,6 @@
           <a href="https://www.anthropic.com" target="_blank" rel="noopener">Claude Sonnet (Anthropic) — AI interpretation of declared data, not verified fact</a>
         </div>
       </div>
-      <div class="footer-sources" id="footer-sources-list" style="margin-top:0.6rem;padding-top:0.6rem;border-top:1px solid #e8e0d4;display:none"></div>
     </div>
   </footer>
 
@@ -771,6 +779,13 @@
 
     submitBtn.addEventListener('click', lookup);
     input.addEventListener('keydown', e => { if (e.key === 'Enter') lookup(); });
+
+    document.getElementById('footer-toggle').addEventListener('click', () => {
+      const toggle = document.getElementById('footer-toggle');
+      const body = document.getElementById('footer-sources-body');
+      toggle.classList.toggle('open');
+      body.classList.toggle('open');
+    });
   </script>
 </body>
 </html>
