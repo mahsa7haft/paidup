@@ -208,7 +208,7 @@ Rules:
 - If uncertain, return null."""
 
 
-def resolve_person_to_company(donor_name: str) -> tuple[str | None, str | None]:
+def resolve_person_to_company(donor_name: str, mp_name: str | None = None) -> tuple[str | None, str | None]:
     """
     Ask Claude whether a donor name belongs to a known company owner/founder.
     Returns (company_name, logo_domain) or (None, None).
@@ -219,12 +219,32 @@ def resolve_person_to_company(donor_name: str) -> tuple[str | None, str | None]:
         return None, None
     try:
         client = anthropic.Anthropic(api_key=api_key)
-        msg = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=80,
-            system=_RESOLVE_PERSON_SYSTEM,
-            messages=[{"role": "user", "content": donor_name}],
-        )
+        if _langfuse_client:
+            with _langfuse_client.start_as_current_observation(
+                name="resolve_person_to_company",
+                as_type="generation",
+                model="claude-haiku-4-5-20251001",
+                input=donor_name,
+                metadata={"donor": donor_name, "mp": mp_name},
+            ):
+                msg = client.messages.create(
+                    model="claude-haiku-4-5-20251001",
+                    max_tokens=80,
+                    system=_RESOLVE_PERSON_SYSTEM,
+                    messages=[{"role": "user", "content": donor_name}],
+                )
+                _langfuse_client.update_current_generation(
+                    output=msg.content[0].text,
+                    usage_details={"input": msg.usage.input_tokens, "output": msg.usage.output_tokens},
+                )
+            _langfuse_client.flush()
+        else:
+            msg = client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=80,
+                system=_RESOLVE_PERSON_SYSTEM,
+                messages=[{"role": "user", "content": donor_name}],
+            )
         raw = msg.content[0].text.strip()
         if not raw:
             return None, None
@@ -238,7 +258,7 @@ def resolve_person_to_company(donor_name: str) -> tuple[str | None, str | None]:
         return None, None
 
 
-def resolve_company_domain(company_name: str) -> str | None:
+def resolve_company_domain(company_name: str, mp_name: str | None = None) -> str | None:
     """
     Ask Claude Haiku for the primary web domain of a company or organisation.
     Returns a domain string or None. Never raises.
@@ -248,12 +268,32 @@ def resolve_company_domain(company_name: str) -> str | None:
         return None
     try:
         client = anthropic.Anthropic(api_key=api_key)
-        msg = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=40,
-            system=_RESOLVE_COMPANY_SYSTEM,
-            messages=[{"role": "user", "content": company_name}],
-        )
+        if _langfuse_client:
+            with _langfuse_client.start_as_current_observation(
+                name="resolve_company_domain",
+                as_type="generation",
+                model="claude-haiku-4-5-20251001",
+                input=company_name,
+                metadata={"company": company_name, "mp": mp_name},
+            ):
+                msg = client.messages.create(
+                    model="claude-haiku-4-5-20251001",
+                    max_tokens=40,
+                    system=_RESOLVE_COMPANY_SYSTEM,
+                    messages=[{"role": "user", "content": company_name}],
+                )
+                _langfuse_client.update_current_generation(
+                    output=msg.content[0].text,
+                    usage_details={"input": msg.usage.input_tokens, "output": msg.usage.output_tokens},
+                )
+            _langfuse_client.flush()
+        else:
+            msg = client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=40,
+                system=_RESOLVE_COMPANY_SYSTEM,
+                messages=[{"role": "user", "content": company_name}],
+            )
         raw = msg.content[0].text.strip()
         if not raw:
             return None
