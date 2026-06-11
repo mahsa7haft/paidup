@@ -401,7 +401,7 @@ def _layout_badges(interests: list[dict],
         if needed <= zone_h:
             opt_max_r = r
             break
-    max_val = max(v for _, v in donors if v > 0) or 1
+    max_val = max((v for _, v in donors if v > 0), default=1)
     sized = sorted(
         [(dn, v, _badge_radius(v, max_val, min_r=MIN_R, max_r=opt_max_r))
          for dn, v in donors],
