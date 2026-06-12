@@ -1,2 +1,5 @@
+[phases.setup]
+nixPkgs = ["uv"]
+
 [phases.install]
-cmds = ["pip install uv && uv sync --no-dev --frozen"]
+cmds = ["uv sync --no-dev --frozen"]
