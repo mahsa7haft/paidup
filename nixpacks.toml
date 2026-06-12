@@ -1,5 +1,5 @@
 [phases.setup]
-nixPkgs = ["uv"]
+addedNixPkgs = ["uv"]
 
 [phases.install]
 cmds = ["uv sync --no-dev --frozen"]
