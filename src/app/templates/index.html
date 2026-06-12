@@ -691,7 +691,7 @@
         appg_register: 'APPG Register',
       };
       const SKIP = new Set(['interests_register']);
-      const el = document.getElementById('footer-sources-list');
+      const el = document.getElementById('footer-sources-body');
       const rows = Object.entries(sources)
         .filter(([key, url]) => url && !SKIP.has(key))
         .map(([key, url]) => `
