@@ -1,0 +1,35 @@
+// Grafana Alloy config — scrapes PaidUp's /metrics and pushes to Grafana Cloud.
+//
+// Deploy this as a second Railway service in the same project:
+//   Image: grafana/alloy:latest
+//   Start command: alloy run /etc/alloy/config.river
+//   Mount this file at /etc/alloy/config.river  (or set ALLOY_CONFIG env var)
+//
+// Required Railway env vars on the Alloy service:
+//   PAIDUP_HOST          Internal Railway hostname, e.g. paidup.railway.internal
+//   PAIDUP_PORT          Port Flask runs on, e.g. 5002
+//   GC_PROM_URL          Grafana Cloud → Connections → Prometheus → Remote write URL
+//   GC_PROM_USER         Grafana Cloud → Connections → Prometheus → Username (numeric)
+//   GC_API_KEY           Grafana Cloud service account token with MetricsPublisher role
+
+prometheus.scrape "paidup" {
+  targets = [{
+    __address__ = env("PAIDUP_HOST") + ":" + env("PAIDUP_PORT"),
+  }]
+  metrics_path    = "/metrics"
+  scrape_interval = "15s"
+  scrape_timeout  = "10s"
+
+  forward_to = [prometheus.remote_write.grafana_cloud.receiver]
+}
+
+prometheus.remote_write "grafana_cloud" {
+  endpoint {
+    url = env("GC_PROM_URL")
+
+    basic_auth {
+      username = env("GC_PROM_USER")
+      password = env("GC_API_KEY")
+    }
+  }
+}

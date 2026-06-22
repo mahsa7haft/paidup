@@ -9,6 +9,7 @@ load_dotenv(os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
 
 from concurrent.futures import ThreadPoolExecutor
 from flask import Flask, render_template, request, jsonify, send_file, redirect
+from prometheus_flask_exporter import PrometheusMetrics
 from app.parliament import (
     search_mp, get_interests, get_biography,
     parse_interests, date_range, parse_biography, deduplicate_donors,
@@ -19,6 +20,7 @@ from app.ai import analyze, prompt_options, get_prompt_version
 from app.theyworkforyou import get_mp_data as get_twfy_data
 import app.cache as cache
 import app.database as db
+from app.metrics import lookup_cache, analysis_cache
 import io
 
 app = Flask(__name__)
@@ -26,6 +28,10 @@ app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret")
 
 # Create DB tables on startup (no-op if DATABASE_URL not set)
 db.ensure_tables()
+
+# Prometheus metrics — auto-instruments every route with latency histograms,
+# request counters, and error rates. Exposed at GET /metrics.
+PrometheusMetrics(app, default_labels={"service": "paidup"})
 
 
 _mp_list_cache: list[dict] | None = None
@@ -88,8 +94,11 @@ def lookup():
     ck = cache.make_key("lookup", name)
     cached = cache.get(ck)
     if cached:
+        lookup_cache.labels(layer="redis").inc()
         cached["_cached"] = "redis"
         return jsonify(cached)
+
+    lookup_cache.labels(layer="miss").inc()
 
     # Fetch from Parliament APIs
     mp = search_mp(name)
@@ -160,6 +169,7 @@ def analyze_mp():
     ck = cache.make_key("analyze", str(member_id or ""), prompt_key, str(version))
     cached = cache.get(ck)
     if cached:
+        analysis_cache.labels(layer="redis").inc()
         cached["_cached"] = "redis"
         return jsonify(cached)
 
@@ -167,12 +177,14 @@ def analyze_mp():
     if member_id:
         stored = db.get_analysis(member_id, prompt_key, version)
         if stored:
+            analysis_cache.labels(layer="db").inc()
             result = {"result": stored, "_cached": "db"}
             # Repopulate Redis so the next request doesn't hit Postgres
             cache.set(ck, {"result": stored}, ttl=cache.ANALYSIS_TTL)
             return jsonify(result)
 
     # Origin: Claude API
+    analysis_cache.labels(layer="api").inc()
     try:
         text = analyze(
             mp_name=data["name"],
