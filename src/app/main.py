@@ -13,7 +13,7 @@ from app.parliament import (
     search_mp, get_interests, get_biography,
     parse_interests, date_range, parse_biography, deduplicate_donors,
 )
-from app.card import generate_card, get_badge_layout
+from app.card import generate_card, generate_mobile_card, get_badge_layout
 import app.r2 as r2
 from app.ai import analyze, prompt_options, get_prompt_version
 from app.theyworkforyou import get_mp_data as get_twfy_data
@@ -219,6 +219,32 @@ def card(member_id):
     png_bytes = buf.getvalue()
 
     cdn_url = r2.upload_card(member_id, png_bytes)
+    if cdn_url:
+        return redirect(cdn_url)
+
+    buf.seek(0)
+    return send_file(buf, mimetype="image/png")
+
+
+@app.route("/card/<int:member_id>/mobile")
+def card_mobile(member_id):
+    mp_name  = request.args.get("name", "")
+    mp_party = request.args.get("party", "")
+    mp_title = request.args.get("title", "")
+
+    cached_url = r2.get_card_url(member_id, variant="mobile")
+    if cached_url:
+        return redirect(cached_url)
+
+    interests = _get_deduped_interests(member_id)
+    oldest, newest = date_range(interests)
+    img = generate_mobile_card(member_id, mp_name, interests, party=mp_party,
+                               title=mp_title, date_from=oldest, date_to=newest)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    png_bytes = buf.getvalue()
+
+    cdn_url = r2.upload_card(member_id, png_bytes, variant="mobile")
     if cdn_url:
         return redirect(cdn_url)
 
