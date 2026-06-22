@@ -229,9 +229,6 @@ def _font(size: int, weight: str = "regular") -> ImageFont.FreeTypeFont:
     return ImageFont.load_default()
 
 
-def _fonts(sizes: list[int]) -> list[ImageFont.FreeTypeFont]:
-    return [_font(s) for s in sizes]
-
 
 def _fmt(value: float) -> str:
     if value >= 1_000_000:
@@ -323,8 +320,7 @@ def _classify_donor(name: str) -> tuple[str, str | None]:
     if link is not None:
         domain = link["logo_domain"]
         if domain and domain != db.NO_COMPANY:
-            badge = "person" if _is_person(name) and not domain else "company_logo"
-            return badge, domain
+            return "company_logo", domain
         return "person" if _is_person(name) else "company_initials", None
 
     # DB miss — ask Claude Haiku
@@ -603,15 +599,6 @@ def _draw_person_badge(img: Image.Image, draw: ImageDraw.ImageDraw,
     img_rgba.paste(stamp, (cx - r, cy - r), stamp)
     img.paste(img_rgba.convert("RGB"), (0, 0))
 
-
-def _draw_anonymous_badge(img: Image.Image, draw: ImageDraw.ImageDraw,
-                          cx: int, cy: int, r: int,
-                          value: float,
-                          font_val: ImageFont.FreeTypeFont,
-                          font_name: ImageFont.FreeTypeFont,
-                          show_q: bool = True) -> None:
-    """Sponsor stamp for anonymous/unnamed donors — always shows SPONSOR."""
-    _draw_person_badge(img, draw, cx, cy, r, "", value, font_val, font_name)
 
 
 
