@@ -598,14 +598,20 @@
       _startCardLoading();
 
       const cardImg = document.getElementById('card-img');
-      cardImg.onload  = () => { _stopCardLoading(); _cardImgReady = true; _renderOverlay(); };
       cardImg.onerror = () => { _stopCardLoading(); };
 
       const party = encodeURIComponent(data.party || '');
       const allPosts = [...(data.govt_posts || []), ...(data.other_posts || [])];
       const title = encodeURIComponent(allPosts.join('|') || '');
-      cardImg.src = `/card/${data.id}?name=${encodeURIComponent(data.name)}&party=${party}&title=${title}`;
-      _fetchBadgeLayout(data.id);
+      const isMobile = window.innerWidth < 600;
+      if (isMobile) {
+        cardImg.onload = () => { _stopCardLoading(); };
+        cardImg.src = `/card/${data.id}/mobile?name=${encodeURIComponent(data.name)}&party=${party}&title=${title}`;
+      } else {
+        cardImg.onload = () => { _stopCardLoading(); _cardImgReady = true; _renderOverlay(); };
+        cardImg.src = `/card/${data.id}?name=${encodeURIComponent(data.name)}&party=${party}&title=${title}`;
+        _fetchBadgeLayout(data.id);
+      }
 
       document.getElementById('toggle-list-count').textContent =
         `${data.count} entr${data.count !== 1 ? 'ies' : 'y'}`;
