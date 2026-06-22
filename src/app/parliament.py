@@ -77,7 +77,7 @@ def deduplicate_donors(interests: list[dict], threshold: float = 0.82) -> list[d
 
 
 def search_mp(name: str) -> dict | None:
-    r = requests.get(f"{MEMBERS_API}/Members/Search", params={"Name": name, "House": 1})
+    r = requests.get(f"{MEMBERS_API}/Members/Search", params={"Name": name, "House": 1}, timeout=10)
     r.raise_for_status()
     items = r.json().get("items", [])
     if not items:
@@ -86,7 +86,7 @@ def search_mp(name: str) -> dict | None:
 
 
 def get_interests(member_id: int) -> list[dict]:
-    r = requests.get(f"{INTERESTS_API}/Interests", params={"MemberId": member_id})
+    r = requests.get(f"{INTERESTS_API}/Interests", params={"MemberId": member_id}, timeout=15)
     r.raise_for_status()
     return r.json().get("items", [])
 

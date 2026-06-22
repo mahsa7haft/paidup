@@ -104,6 +104,9 @@ def _load_party_logo(party: str) -> "Image.Image | None":
 CARD_W, CARD_H = 900, 500
 PHOTO_W, PHOTO_H = 320, 480
 
+MOBILE_W, MOBILE_H = 500, 900
+MOBILE_PHOTO_H = 280
+
 # ── Palette (brand F — cream) ─────────────────────────────────────────────────
 CREAM       = "#f0ebe0"
 PANEL_LINE  = "#d8d0c4"
@@ -611,6 +614,177 @@ def _draw_anonymous_badge(img: Image.Image, draw: ImageDraw.ImageDraw,
     _draw_person_badge(img, draw, cx, cy, r, "", value, font_val, font_name)
 
 
+
+
+def _fit_photo_wide(photo: Image.Image, target_w: int, target_h: int) -> Image.Image:
+    """Scale to fill target_w, then top-biased crop to target_h. Used for mobile header."""
+    src_w, src_h = photo.size
+    scale = target_w / src_w
+    new_w, new_h = target_w, int(src_h * scale)
+    photo = photo.resize((new_w, new_h), Image.LANCZOS)
+    if new_h >= target_h:
+        top = max(0, (new_h - target_h) // 3)
+        photo = photo.crop((0, top, new_w, top + target_h))
+    else:
+        canvas = Image.new(photo.mode, (target_w, target_h), CREAM[:7])
+        canvas.paste(photo, (0, 0))
+        photo = canvas
+    return photo
+
+
+def _photo_gradient(width: int, height: int, gradient_h: int = 180) -> Image.Image:
+    """RGBA overlay: transparent at top, ~74% black at bottom for text legibility."""
+    overlay = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    d = ImageDraw.Draw(overlay)
+    start_y = height - gradient_h
+    for i in range(gradient_h):
+        alpha = int(190 * (i / gradient_h) ** 2)
+        d.line([(0, start_y + i), (width - 1, start_y + i)], fill=(0, 0, 0, alpha))
+    return overlay
+
+
+def _draw_mini_badge(
+    img: Image.Image, draw: ImageDraw.ImageDraw,
+    cx: int, cy: int, r: int,
+    name: str, badge_type: str, domain: str | None,
+    font: ImageFont.FreeTypeFont,
+) -> None:
+    """40px circular badge for the mobile donor list rows."""
+    d = r * 2
+    if badge_type == "company_logo" and domain:
+        logo = _fetch_logo(domain)
+        if logo:
+            logo_s = logo.resize((d, d), Image.LANCZOS).convert("RGBA")
+            mask = Image.new("L", (d, d), 0)
+            ImageDraw.Draw(mask).ellipse([0, 0, d - 1, d - 1], fill=255)
+            bg = Image.new("RGBA", (d, d), COMPANY_FILL)
+            bg.paste(logo_s, (0, 0), logo_s)
+            img_rgba = img.convert("RGBA")
+            img_rgba.paste(bg, (cx - r, cy - r), mask)
+            img.paste(img_rgba.convert("RGB"), (0, 0))
+            return
+    if badge_type in ("company_logo", "company_initials"):
+        draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=COMPANY_FILL, outline=COMPANY_RIM, width=2)
+        draw.text((cx, cy), _initials(name), fill=BADGE_TEXT, font=font, anchor="mm")
+    else:
+        draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=PERSON_FILL, outline=PERSON_RIM, width=2)
+        _person_silhouette(draw, cx, cy - r // 4, max(4, r // 3), "white")
+
+
+def generate_mobile_card(
+    member_id: int, name: str, interests: list[dict],
+    party: str = "", title: str = "",
+    date_from: str = "", date_to: str = "",
+) -> Image.Image:
+    """
+    Portrait card (500×900) for mobile screens.
+    Full-width photo header with gradient overlay, then readable donor list rows.
+    """
+    card = Image.new("RGB", (MOBILE_W, MOBILE_H), CREAM)
+    draw = ImageDraw.Draw(card)
+
+    font_name_lg  = _font(26, "semibold")
+    font_party_sm = _font(13, "semibold")
+    font_total    = _font(38, "semibold")
+    font_sub      = _font(14, "regular")
+    font_section  = _font(11, "semibold")
+    font_row_name = _font(16, "semibold")
+    font_row_amt  = _font(14, "medium")
+    font_badge    = _font(13, "medium")
+    font_footer   = _font(11, "regular")
+
+    # ── Photo header ──
+    photo = _fetch_photo(member_id)
+    if photo:
+        fitted = _fit_photo_wide(photo, MOBILE_W, MOBILE_PHOTO_H)
+        card.paste(fitted.convert("RGB"), (0, 0))
+        grad = _photo_gradient(MOBILE_W, MOBILE_PHOTO_H)
+        card_rgba = card.convert("RGBA")
+        card_rgba.paste(grad, (0, 0), grad)
+        card = card_rgba.convert("RGB")
+        draw = ImageDraw.Draw(card)
+
+    # Name with drop-shadow so it reads over any photo background
+    nx, ny = 20, MOBILE_PHOTO_H - 68
+    draw.text((nx + 1, ny + 1), name, fill="#222222", font=font_name_lg)
+    draw.text((nx, ny), name, fill="white", font=font_name_lg)
+    ny += 32
+
+    if party:
+        colour = _party_colour(party)
+        bb = draw.textbbox((0, 0), party, font=font_party_sm)
+        tw, th = bb[2] - bb[0], bb[3] - bb[1]
+        draw.rounded_rectangle([nx, ny, nx + tw + 18, ny + th + 10], radius=4, fill=colour)
+        draw.text((nx + 9, ny + 5), party, fill="white", font=font_party_sm)
+
+    # ── Stats ──
+    cy = MOBILE_PHOTO_H + 20
+    total = sum(i["value"] for i in interests)
+    draw.text((20, cy), f"£{round(total):,}", fill=TEXT_DARK, font=font_total)
+    cy += 46
+    draw.text((20, cy), "declared to Parliament", fill=TEXT_DIM, font=font_sub)
+    cy += 24
+    draw.line([(20, cy), (MOBILE_W - 20, cy)], fill=PANEL_LINE, width=1)
+    cy += 16
+
+    # ── Donor rows ──
+    draw.text((20, cy), "TOP DONORS", fill=TEXT_DIM, font=font_section)
+    cy += 24
+
+    donors  = _aggregate(interests)
+    BADGE_R = 20
+    ROW_H   = BADGE_R * 2 + 16   # 8px top + 8px bottom padding
+    BADGE_CX = 20 + BADGE_R
+    TEXT_X   = 20 + BADGE_R * 2 + 14
+    AMT_X    = MOBILE_W - 20
+    max_name_w = AMT_X - TEXT_X - 72
+
+    max_rows = min(len(donors), (MOBILE_H - 44 - cy) // ROW_H)
+
+    for i, (dname, dval) in enumerate(donors[:max_rows]):
+        row_top  = cy + i * ROW_H
+        badge_cy = row_top + ROW_H // 2
+
+        if dname == "Unknown":
+            draw.ellipse(
+                [BADGE_CX - BADGE_R, badge_cy - BADGE_R,
+                 BADGE_CX + BADGE_R, badge_cy + BADGE_R],
+                fill=ANON_FILL, outline=ANON_RIM, width=2,
+            )
+            draw.text((BADGE_CX, badge_cy), "?", fill="white", font=font_badge, anchor="mm")
+        else:
+            badge_type, domain = _classify_donor(dname)
+            _draw_mini_badge(card, draw, BADGE_CX, badge_cy, BADGE_R, dname, badge_type, domain, font_badge)
+            draw = ImageDraw.Draw(card)
+
+        display = dname if dname != "Unknown" else "Anonymous donors"
+        bb = draw.textbbox((0, 0), display, font=font_row_name)
+        if bb[2] - bb[0] > max_name_w:
+            while len(display) > 3 and \
+                  draw.textbbox((0, 0), display + "…", font=font_row_name)[2] - \
+                  draw.textbbox((0, 0), display + "…", font=font_row_name)[0] > max_name_w:
+                display = display[:-1]
+            display += "…"
+        draw.text((TEXT_X, badge_cy), display, fill=TEXT_DARK, font=font_row_name, anchor="lm")
+
+        val_str = _fmt(dval) if dval > 0 else "Non-cash"
+        draw.text((AMT_X, badge_cy), val_str, fill=BRAND_GREEN, font=font_row_amt, anchor="rm")
+
+        if i < max_rows - 1:
+            draw.line([(TEXT_X, row_top + ROW_H - 1), (MOBILE_W - 20, row_top + ROW_H - 1)],
+                      fill=PANEL_LINE, width=1)
+
+    if len(donors) > max_rows:
+        oy = cy + max_rows * ROW_H + 10
+        draw.text((20, oy), f"+ {len(donors) - max_rows} more · paidup.co",
+                  fill=TEXT_DIM, font=font_footer)
+
+    # ── Footer ──
+    draw.line([(20, MOBILE_H - 36), (MOBILE_W - 20, MOBILE_H - 36)], fill=PANEL_LINE, width=1)
+    draw.text((20, MOBILE_H - 24), "paidup.co  ·  UK Parliament declared interests",
+              fill=TEXT_DIM, font=font_footer)
+
+    return card
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────

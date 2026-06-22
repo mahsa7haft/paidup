@@ -7,12 +7,13 @@ from dotenv import load_dotenv
 
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
 
+from concurrent.futures import ThreadPoolExecutor
 from flask import Flask, render_template, request, jsonify, send_file, redirect
 from app.parliament import (
     search_mp, get_interests, get_biography,
     parse_interests, date_range, parse_biography, deduplicate_donors,
 )
-from app.card import generate_card, get_badge_layout
+from app.card import generate_card, generate_mobile_card, get_badge_layout
 import app.r2 as r2
 from app.ai import analyze, prompt_options, get_prompt_version
 from app.theyworkforyou import get_mp_data as get_twfy_data
@@ -28,6 +29,17 @@ db.ensure_tables()
 
 
 _mp_list_cache: list[dict] | None = None
+
+
+def _get_deduped_interests(member_id: int) -> list[dict]:
+    """Return deduplicated parsed interests, using Redis cache if available."""
+    ck = cache.make_key("interests", str(member_id))
+    hit = cache.get(ck)
+    if hit is not None:
+        return hit
+    result = deduplicate_donors(parse_interests(get_interests(member_id)))
+    cache.set(ck, result, ttl=cache.LOOKUP_TTL)
+    return result
 
 
 def _get_mp_list() -> list[dict]:
@@ -87,14 +99,22 @@ def lookup():
     member_id = mp["id"]
     mp_name = mp["nameDisplayAs"]
 
-    interests = db.apply_donor_tags(
-        deduplicate_donors(parse_interests(get_interests(member_id)))
-    )
+    # Fetch interests, biography, and TWFY data in parallel — all only need member_id / mp_name
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        f_interests = pool.submit(get_interests, member_id)
+        f_bio = pool.submit(get_biography, member_id)
+        f_twfy = pool.submit(get_twfy_data, mp_name)
+        raw_interests = f_interests.result()
+        bio_raw = f_bio.result()
+        twfy = f_twfy.result()
+
+    deduped = deduplicate_donors(parse_interests(raw_interests))
+    cache.set(cache.make_key("interests", str(member_id)), deduped, ttl=cache.LOOKUP_TTL)
+    interests = db.apply_donor_tags(deduped)
     total = sum(i["value"] for i in interests)
     oldest, newest = date_range(interests)
 
-    bio_data = parse_biography(get_biography(member_id))
-    twfy = get_twfy_data(mp_name)
+    bio_data = parse_biography(bio_raw)
 
     sources = {
         "parliament_member": f"https://members.parliament.uk/member/{member_id}",
@@ -190,7 +210,7 @@ def card(member_id):
     if cached_url:
         return redirect(cached_url)
 
-    interests = deduplicate_donors(parse_interests(get_interests(member_id)))
+    interests = _get_deduped_interests(member_id)
     oldest, newest = date_range(interests)
     img = generate_card(member_id, mp_name, interests, party=mp_party,
                         title=mp_title, date_from=oldest, date_to=newest)
@@ -206,9 +226,35 @@ def card(member_id):
     return send_file(buf, mimetype="image/png")
 
 
+@app.route("/card/<int:member_id>/mobile")
+def card_mobile(member_id):
+    mp_name  = request.args.get("name", "")
+    mp_party = request.args.get("party", "")
+    mp_title = request.args.get("title", "")
+
+    cached_url = r2.get_card_url(member_id, variant="mobile")
+    if cached_url:
+        return redirect(cached_url)
+
+    interests = _get_deduped_interests(member_id)
+    oldest, newest = date_range(interests)
+    img = generate_mobile_card(member_id, mp_name, interests, party=mp_party,
+                               title=mp_title, date_from=oldest, date_to=newest)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    png_bytes = buf.getvalue()
+
+    cdn_url = r2.upload_card(member_id, png_bytes, variant="mobile")
+    if cdn_url:
+        return redirect(cdn_url)
+
+    buf.seek(0)
+    return send_file(buf, mimetype="image/png")
+
+
 @app.route("/card/<int:member_id>/badges")
 def card_badges(member_id):
-    interests = deduplicate_donors(parse_interests(get_interests(member_id)))
+    interests = _get_deduped_interests(member_id)
     return jsonify(get_badge_layout(interests, member_id))
 
 
