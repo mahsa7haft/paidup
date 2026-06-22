@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
 
+from concurrent.futures import ThreadPoolExecutor, wait, FIRST_EXCEPTION
 from flask import Flask, render_template, request, jsonify, send_file, redirect
 from app.parliament import (
     search_mp, get_interests, get_biography,
@@ -87,14 +88,22 @@ def lookup():
     member_id = mp["id"]
     mp_name = mp["nameDisplayAs"]
 
+    # Fetch interests, biography, and TWFY data in parallel — all only need member_id / mp_name
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        f_interests = pool.submit(get_interests, member_id)
+        f_bio = pool.submit(get_biography, member_id)
+        f_twfy = pool.submit(get_twfy_data, mp_name)
+        raw_interests = f_interests.result()
+        bio_raw = f_bio.result()
+        twfy = f_twfy.result()
+
     interests = db.apply_donor_tags(
-        deduplicate_donors(parse_interests(get_interests(member_id)))
+        deduplicate_donors(parse_interests(raw_interests))
     )
     total = sum(i["value"] for i in interests)
     oldest, newest = date_range(interests)
 
-    bio_data = parse_biography(get_biography(member_id))
-    twfy = get_twfy_data(mp_name)
+    bio_data = parse_biography(bio_raw)
 
     sources = {
         "parliament_member": f"https://members.parliament.uk/member/{member_id}",
