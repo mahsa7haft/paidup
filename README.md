@@ -18,8 +18,7 @@ Search any MP by name and instantly see their declared financial interests — d
    - **Unattributed** — dark grey circle with "?" (hover to see the combined total)
 5. Hover any badge on the card for a tooltip showing the donor name and amount
 6. Displays a full breakdown table of all declared interests (unattributable entries shown as *Payer not named*)
-7. Known donor affiliations (e.g. Friends of Israel, BICOM) are shown as coloured tag pills in the interests table
-6. AI analysis via Claude: plain English summary, investigative angle, donor profiles, and gap detection — with an animated magnifying glass while the report generates
+7. AI analysis via Claude: plain English summary, investigative angle, donor profiles, and gap detection — with an animated magnifying glass while the report generates
 
 ## Tech Stack
 
@@ -37,7 +36,8 @@ Search any MP by name and instantly see their declared financial interests — d
 | Caching L2 | PostgreSQL (AI results 28 days, donor links permanent) |
 | Card CDN | Cloudflare R2 (generated cards cached monthly, served from edge) |
 | Package manager | uv |
-| Observability | Langfuse (token usage, cost, latency per Claude call) |
+| Observability — LLM | Langfuse (token usage, cost, latency per Claude call) |
+| Observability — service | Prometheus metrics at `/metrics` + Grafana Alloy (request rate, latency, error rate, cache hit/miss) |
 | Deployment | Railway (auto-deploy from GitHub, Postgres + Redis plugins) |
 
 ## Data Sources
@@ -169,7 +169,7 @@ docker exec paidup-postgres psql -U paidup -d paidup \
   -c "SELECT * FROM donor_company_links;"
 ```
 
-#### The three tables
+#### The two tables
 
 **`donor_company_links`** — maps donor names to company logo domains. Seeded lazily by Claude Haiku the first time a new donor is seen; never re-queried after that.
 
@@ -197,15 +197,6 @@ docker exec paidup-postgres psql -U paidup -d paidup \
       ON CONFLICT (donor_name) DO UPDATE \
         SET logo_domain = EXCLUDED.logo_domain, source = 'manual';"
 ```
-
-**`donor_tags`** — affiliation labels applied to donors whose names match a known pattern. Managed via `data/donor_tags.csv` — see [Donor Affiliation Tags](#donor-affiliation-tags) below.
-
-| Column | Meaning |
-|---|---|
-| `name_pattern` | Lowercase substring to match against the donor name (e.g. `friends of israel`) |
-| `tag` | Machine-readable category slug (e.g. `pro-israel`) |
-| `label` | Human-readable label shown as a pill in the UI (e.g. `Friends of Israel`) |
-| `notes` | Optional context (not displayed) |
 
 **`analyses`** — cached AI analysis reports, kept for 28 days (Parliament's register update cycle). Cleared automatically when stale.
 
@@ -299,72 +290,13 @@ Railway deploys automatically on every push to `main`. Once the build completes,
 
 ---
 
-## Donor Affiliation Tags
-
-PaidUp can flag donors with known political or ideological affiliations — shown as coloured pills in the interests table. The tag list is stored in `data/donor_tags.csv` (version-controlled, editable without touching code) and synced into the `donor_tags` Postgres table.
-
-### How matching works
-
-Each row in the CSV has a `name_pattern` column — a lowercase substring. If that substring appears anywhere in a donor's name (case-insensitive), the tag is attached to every interest entry from that donor. One pattern can match many organisations:
-
-```
-friends of israel  →  Conservative Friends of Israel
-                       Labour Friends of Israel
-                       Liberal Democrat Friends of Israel
-                       SNP Friends of Israel
-```
-
-### Adding or updating tags
-
-1. Open `data/donor_tags.csv` and add or edit rows:
-
-```csv
-name_pattern,tag,label,notes
-friends of israel,pro-israel,Friends of Israel,Catches all party chapters
-fossil fuel industry,fossil-fuel,Fossil Fuel Industry,Oil / gas / coal donors
-```
-
-2. Run the seed command to push changes into the DB:
-
-```bash
-PYTHONPATH=src uv run python -m app.seed_tags
-```
-
-Safe to run repeatedly — rows are upserted. The in-process cache refreshes automatically within 5 minutes; no app restart needed.
-
-3. Commit the updated CSV. The DB on Railway must be re-seeded after each deploy that changes the file — run the same command against the Railway environment, or add it to your deploy script.
-
-### Adding a custom colour for a new tag
-
-By default, unrecognised tags display in a neutral cream colour. To give a tag its own colour, add a CSS class to `src/app/templates/index.html`:
-
-```css
-.donor-tag-fossil-fuel { background: #fef3cd; color: #7a4f00; border-color: #f0c070; }
-```
-
-The class name is always `.donor-tag-{tag}` with any non-alphanumeric characters replaced by `-`.
-
-### Initial tag set
-
-| Pattern | Tag | Label |
-|---|---|---|
-| `friends of israel` | `pro-israel` | Friends of Israel |
-| `bicom` | `pro-israel` | BICOM |
-| `uk israel business` | `pro-israel` | UK Israel Business |
-| `anglo-israel association` | `pro-israel` | Anglo-Israel Association |
-| `jewish labour movement` | `pro-israel` | Jewish Labour Movement |
-| `jlm` | `pro-israel` | Jewish Labour Movement |
-| `cfoi` | `pro-israel` | Conservative Friends of Israel |
-
----
-
 ## Running Tests
 
 ```bash
 uv run pytest tests/ -v
 ```
 
-64 tests across four modules — no database or API key needed (all external calls are mocked):
+65 tests across four modules — no database or API key needed (all external calls are mocked):
 
 | File | What it covers |
 |---|---|
@@ -385,10 +317,10 @@ paidup/
 │       ├── ai.py                # Claude AI analysis + donor company resolver (Haiku)
 │       ├── card.py              # Donor card image generator (Pillow, Inter font)
 │       ├── r2.py                # Cloudflare R2 card image cache (CDN upload/lookup)
-│       ├── database.py          # PostgreSQL layer — analysis cache + donor_company_links + donor_tags
+│       ├── database.py          # PostgreSQL layer — analysis cache + donor_company_links
 │       ├── cache.py             # Redis wrapper (L1 cache)
+│       ├── metrics.py           # Prometheus counters (cache hit/miss) exposed at /metrics
 │       ├── text_utils.py        # Shared name normalisation + TF-IDF fuzzy matching
-│       ├── seed_tags.py         # CLI: sync data/donor_tags.csv into donor_tags table
 │       ├── fonts/               # Bundled Inter typeface (Regular, Medium, SemiBold)
 │       ├── prompts/             # Versioned AI prompt files
 │       │   ├── summary_v1.txt
@@ -397,8 +329,6 @@ paidup/
 │       │   └── gaps_v1.txt
 │       └── templates/
 │           └── index.html       # Web UI (cream / brand F theme)
-├── data/
-│   └── donor_tags.csv           # Editable affiliation tag list — sync with seed_tags.py
 ├── tests/
 │   ├── test_text_utils.py
 │   ├── test_card_badges.py
@@ -436,9 +366,6 @@ parse_interests() → resolve donor name from DonorName / DonorCompanyName
       ↓
 deduplicate_donors() → TF-IDF cosine similarity clusters near-identical names
       ↓
-apply_donor_tags() → substring match against donor_tags table
-                     attaches [{tag, label}] to each interest entry
-      ↓
 For each donor → check donor_company_links DB (fuzzy match, threshold 0.75)
                  → DB miss: ask Claude Haiku for company domain (~$0.001)
                  → store result permanently
@@ -457,7 +384,7 @@ User clicks "Open Donor Analysis"
       ↓
 Markdown report rendered in slide-in drawer
       ↓
-Data Sources footer always visible at bottom of page
+Data Sources footer revealed once an MP card loads (collapsible on mobile)
 ```
 
 ## Example Searches
