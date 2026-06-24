@@ -100,7 +100,7 @@ THEYWORKFORYOU_API_KEY=your-key-here
 FLASK_SECRET_KEY=change-me
 
 # Optional — local Postgres (see step 4 below)
-# DATABASE_URL=postgresql://paidup:paidup_dev@localhost:5432/paidup
+# DATABASE_URL=postgresql://USER:PASSWORD@HOST:PORT/DB
 
 # Optional — local Redis
 # REDIS_URL=redis://localhost:6379
@@ -133,10 +133,10 @@ docker run -d \
   postgres:16-alpine
 ```
 
-Then add this to your `.env`:
+Then add this to your `.env`, filling in the values you set in the `docker run` command above (`USER` / `PASSWORD` / `DB` come from the `POSTGRES_*` flags, `HOST` is `localhost`, `PORT` is the host side of `-p`):
 
 ```
-DATABASE_URL=postgresql://paidup:paidup_dev@localhost:5432/paidup
+DATABASE_URL=postgresql://USER:PASSWORD@HOST:PORT/DB
 ```
 
 The app creates the required tables automatically on startup. To stop and restart the container between sessions:
