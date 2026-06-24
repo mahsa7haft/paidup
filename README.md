@@ -6,6 +6,8 @@
 
 Search any MP by name and instantly see their declared financial interests — donors, gifts, hospitality, and shareholdings — pulled live from the official UK Parliament Register of Members' Financial Interests. Includes AI-powered analysis to surface conflicts of interest, donor profiles, and factional leanings.
 
+> **Sister project:** [PaidUp Intelligence](https://github.com/mahsa7haft/paidup-intelligence) answers the reverse question — *"which MPs are funded by X?"* — using RAG and semantic search across Parliament and Electoral Commission data. See [Sister Project](#sister-project--paidup-intelligence) below.
+
 ## What it does
 
 1. Search any MP by name
@@ -400,14 +402,29 @@ See the [GitHub Issues](https://github.com/mahsa7haft/paidup/issues) board for t
 
 | # | Title |
 |---|---|
-| [#8](https://github.com/mahsa7haft/paidup/issues/8) | Party logos on card instead of party name text |
-| [#22](https://github.com/mahsa7haft/paidup/issues/22) | Exclude Unknown donors from declared donor count and interests table |
-| [#23](https://github.com/mahsa7haft/paidup/issues/23) | Company logos not rendering on donor badges |
-| [#24](https://github.com/mahsa7haft/paidup/issues/24) | Add Claude/Anthropic as data source; AI reports should cite sources |
-| [#25](https://github.com/mahsa7haft/paidup/issues/25) | Clearbit logos not rendering despite correct domains in DB |
-| [#33](https://github.com/mahsa7haft/paidup/issues/33) | Transparency: add AI usage and environmental impact page |
-| [#34](https://github.com/mahsa7haft/paidup/issues/34) | Company logo badges not visually proportional to donation amount |
+| [#60](https://github.com/mahsa7haft/paidup/issues/60) | Emergency: restore PaidUp after Railway Postgres crash |
+| [#54](https://github.com/mahsa7haft/paidup/issues/54) | Perf: donor classification calls Claude Haiku once per unknown donor, sequentially |
+| [#49](https://github.com/mahsa7haft/paidup/issues/49) | Ops: schedule monthly card regeneration in R2 + keep manual trigger |
+| [#47](https://github.com/mahsa7haft/paidup/issues/47) | Mobile: donor badge tooltips and card details not usable on small screens |
+| [#46](https://github.com/mahsa7haft/paidup/issues/46) | Bug: companies frequently misclassified as persons in donor table |
+| [#43](https://github.com/mahsa7haft/paidup/issues/43) | Legal: review AI output framing and UK defamation exposure before monetisation |
+| [#42](https://github.com/mahsa7haft/paidup/issues/42) | Card: display committee memberships with visual distinction from roles |
 | [#37](https://github.com/mahsa7haft/paidup/issues/37) | Epic: share MP donor card on social media |
+| [#33](https://github.com/mahsa7haft/paidup/issues/33) | Transparency: add AI usage and environmental impact page |
+| [#24](https://github.com/mahsa7haft/paidup/issues/24) | Transparency: add Claude/Anthropic as data source; AI reports should cite sources |
+| [#8](https://github.com/mahsa7haft/paidup/issues/8) | Card: show party logo instead of party name text |
+
+## Sister Project — PaidUp Intelligence
+
+[**PaidUp Intelligence**](https://github.com/mahsa7haft/paidup-intelligence) is a companion service that inverts what PaidUp does. PaidUp surfaces *who funds a given MP*; PaidUp Intelligence answers *which MPs are funded by X* — and cross-references donors, votes, party funding, and APPG memberships to surface conflicts of interest that would take hours to find by hand.
+
+It uses Retrieval-Augmented Generation (RAG): Parliament Register and Electoral Commission data are embedded into a pgvector store, queried by MCP tools, and reasoned over by a LangGraph agent. Example questions it can answer:
+
+- *"Which MPs received money from fossil fuel companies?"*
+- *"Are there any donors who give to both Labour and Conservative MPs?"*
+- *"Which MPs are in the fossil fuel APPG, voted against green energy bills, AND whose party received oil company donations?"*
+
+The two projects share the same data sources and are designed to be deployed alongside each other.
 
 ## Roadmap
 
