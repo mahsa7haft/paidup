@@ -128,12 +128,14 @@ docker run -d \
   --name paidup-postgres \
   -e POSTGRES_DB=paidup \
   -e POSTGRES_USER=paidup \
-  -e POSTGRES_PASSWORD=paidup_dev \
-  -p 5432:5432 \
+  -e POSTGRES_PASSWORD=YOUR_DEV_PASSWORD \
+  -p HOST_PORT:5432 \
   postgres:16-alpine
 ```
 
-Then add this to your `.env`, filling in the values you set in the `docker run` command above (`USER` / `PASSWORD` / `DB` come from the `POSTGRES_*` flags, `HOST` is `localhost`, `PORT` is the host side of `-p`):
+Choose your own `YOUR_DEV_PASSWORD` and `HOST_PORT` (the container always listens on the Postgres default `5432` — `HOST_PORT` is whatever free port you map it to on your machine).
+
+Then add this to your `.env`, filling in the values you set in the `docker run` command above (`USER` / `PASSWORD` / `DB` come from the `POSTGRES_*` flags, `HOST` is `localhost`, `PORT` is your chosen `HOST_PORT`):
 
 ```
 DATABASE_URL=postgresql://USER:PASSWORD@HOST:PORT/DB
