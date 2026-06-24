@@ -2,7 +2,11 @@
 
 import pytest
 from unittest.mock import MagicMock, patch, call
-from app.database import get_donor_company_link, save_donor_company_link, NO_COMPANY
+from app.database import (
+    get_donor_company_link,
+    save_donor_company_link,
+    NO_COMPANY,
+)
 
 
 def _make_pool(rows=None, fetchone=None):

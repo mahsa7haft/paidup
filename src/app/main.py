@@ -119,7 +119,7 @@ def lookup():
 
     deduped = deduplicate_donors(parse_interests(raw_interests))
     cache.set(cache.make_key("interests", str(member_id)), deduped, ttl=cache.LOOKUP_TTL)
-    interests = db.apply_donor_tags(deduped)
+    interests = deduped
     total = sum(i["value"] for i in interests)
     oldest, newest = date_range(interests)
 

@@ -42,8 +42,9 @@ class TestIsPerson:
         assert _is_person("The Rowntree Foundation Trust") is False
 
     def test_plain_name_no_title(self):
-        # No title prefix — not detected (by design; rare plain-name donors stay as company-initials)
-        assert _is_person("Jane Smith") is False
+        # 2–3 capitalised words with no digits are detected as a person name,
+        # even without a title prefix.
+        assert _is_person("Jane Smith") is True
 
     def test_leading_whitespace(self):
         assert _is_person("  Sir Trevor Chinn") is True
@@ -83,8 +84,8 @@ class TestInitials:
         assert len(result) == 2
 
     def test_lord_name(self):
-        # "Lord" is not in _initials skip list — it contributes the first initial
-        assert _initials("Lord David Sainsbury") == "LS"
+        # "Lord" is a title word and is stripped — initials come from the actual name
+        assert _initials("Lord David Sainsbury") == "DS"
 
 
 class TestClassifyDonor:
