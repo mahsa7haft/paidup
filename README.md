@@ -149,70 +149,12 @@ docker start paidup-postgres  # restart
 docker rm -f paidup-postgres  # delete completely
 ```
 
-#### Inspecting and editing the database
+The app creates two tables automatically on startup:
 
-Open an interactive Postgres shell:
+- **`donor_company_links`** — maps donor names to company logo domains. Seeded lazily by Claude Haiku the first time a new donor is seen, then cached permanently (`logo_domain` is `__person__` when the donor is a private individual with no company link).
+- **`analyses`** — cached AI analysis reports, kept for 28 days (Parliament's register update cycle), cleared automatically when stale.
 
-```bash
-docker exec -it paidup-postgres psql -U paidup -d paidup
-```
-
-Useful commands once inside:
-
-```sql
-\dt                             -- list all tables
-SELECT * FROM donor_company_links;
-SELECT member_id, prompt_key, generated_at FROM analyses ORDER BY generated_at DESC;
-\q                              -- quit
-```
-
-Run a one-off query without entering the shell:
-
-```bash
-docker exec paidup-postgres psql -U paidup -d paidup \
-  -c "SELECT * FROM donor_company_links;"
-```
-
-#### The two tables
-
-**`donor_company_links`** — maps donor names to company logo domains. Seeded lazily by Claude Haiku the first time a new donor is seen; never re-queried after that.
-
-| Column | Meaning |
-|---|---|
-| `donor_name` | Name as it appears in the Parliament register |
-| `company_name` | Display name of the linked company (if any) |
-| `logo_domain` | Domain used to fetch a logo via Google Favicons — or `__person__` if confirmed to be a private individual with no company link |
-| `source` | `ai` (resolved by Claude Haiku) or `manual` (hand-corrected) |
-
-Manually correct a wrong domain:
-
-```bash
-docker exec paidup-postgres psql -U paidup -d paidup \
-  -c "UPDATE donor_company_links SET logo_domain = 'correct-domain.com', source = 'manual' \
-      WHERE donor_name = 'Donor Name Here';"
-```
-
-Manually seed a known person → company link (e.g. before any card is rendered):
-
-```bash
-docker exec paidup-postgres psql -U paidup -d paidup \
-  -c "INSERT INTO donor_company_links (donor_name, company_name, logo_domain, source) \
-      VALUES ('Lord David Sainsbury', 'Sainsbury''s', 'sainsburys.co.uk', 'manual') \
-      ON CONFLICT (donor_name) DO UPDATE \
-        SET logo_domain = EXCLUDED.logo_domain, source = 'manual';"
-```
-
-**`analyses`** — cached AI analysis reports, kept for 28 days (Parliament's register update cycle). Cleared automatically when stale.
-
-```bash
-# See all cached analyses
-docker exec paidup-postgres psql -U paidup -d paidup \
-  -c "SELECT member_id, prompt_key, prompt_version, generated_at FROM analyses ORDER BY generated_at DESC;"
-
-# Force re-analysis for a specific MP (deletes their cached result)
-docker exec paidup-postgres psql -U paidup -d paidup \
-  -c "DELETE FROM analyses WHERE member_id = 4514;"
-```
+Inspect them with `docker exec -it paidup-postgres psql -U paidup -d paidup`.
 
 ### 5. Run the app
 
@@ -226,71 +168,23 @@ Open [http://localhost:5002](http://localhost:5002)
 
 ## Deploying to Railway
 
-[Railway](https://railway.app) is the recommended deployment platform. It supports Python and environment variables out of the box.
+PaidUp deploys on [Railway](https://railway.app): connect the GitHub repo and it auto-detects Python and redeploys on every push to `main`. The `railway.toml` in the repo root sets the start command — no manual config needed.
 
-### 1. Push your code to GitHub
+Add the **Postgres** and **Redis** plugins (**+ New → Database**) and Railway injects `DATABASE_URL` / `REDIS_URL` automatically. Both are optional — the app degrades gracefully without them:
+- **Postgres** persists AI analyses for 28 days across restarts and redeploys. `/health` reports `"db": true` when connected.
+- **Redis** caches Parliament lookups for 1h and analyses for 24h (the prompt version is part of the cache key, so a new prompt version invalidates old results).
 
-Make sure your latest code is on the `main` branch:
-
-```bash
-git push origin main
-```
-
-> **Never commit your `.env` file.** It is listed in `.gitignore`. Add secrets via Railway's environment variable UI instead.
-
-### 2. Create a new Railway project
-
-1. Go to [railway.app](https://railway.app) and sign in
-2. Click **New Project → Deploy from GitHub repo**
-3. Select your `paidup` repository
-4. Railway will auto-detect Python and start a build
-
-### 3. Set environment variables
-
-In your Railway project, go to **Variables** and add:
+Set these under **Variables** (never commit `.env` — it's gitignored):
 
 | Variable | Value |
 |---|---|
 | `ANTHROPIC_API_KEY` | Your Anthropic API key |
 | `THEYWORKFORYOU_API_KEY` | Your TheyWorkForYou key (optional) |
 | `FLASK_SECRET_KEY` | Any long random string |
-| `REDIS_URL` | Set automatically by the Railway Redis plugin (see below) |
-| `DATABASE_URL` | Set automatically by the Railway Postgres plugin (see below) |
-| `PORT` | Railway sets this automatically — do not override |
-| `LANGFUSE_PUBLIC_KEY` | Optional — Langfuse observability ([cloud.langfuse.com](https://cloud.langfuse.com)) |
-| `LANGFUSE_SECRET_KEY` | Optional — Langfuse observability |
-| `R2_ACCOUNT_ID` | Optional — Cloudflare account ID (enables card CDN caching) |
-| `R2_ACCESS_KEY_ID` | Optional — R2 API token access key |
-| `R2_SECRET_ACCESS_KEY` | Optional — R2 API token secret |
-| `R2_BUCKET_NAME` | Optional — R2 bucket name (e.g. `paidup`) |
-| `R2_PUBLIC_URL` | Optional — public bucket URL e.g. `https://pub-xxxx.r2.dev` |
-
-### 4. Start command
-
-The `railway.toml` in the repo root configures the start command automatically — no manual setup needed.
-
-### 5. Add Postgres (recommended)
-
-In your Railway project, click **+ New** → **Database** → **PostgreSQL**. Railway provisions a Postgres instance and injects `DATABASE_URL` automatically.
-
-With Postgres enabled, AI analysis results are stored persistently for **28 days** (Parliament's register update cycle). The first analysis for each MP + prompt style costs one Claude API call — every subsequent request within 28 days is free and instant, and survives app restarts and redeployments.
-
-The `/health` endpoint reports `"db": true` when the connection is live.
-
-### 6. Add Redis (recommended)
-
-In your Railway project, click **+ New** → **Database** → **Redis**. Railway provisions a Redis instance and automatically injects `REDIS_URL` into your app's environment. No extra configuration needed.
-
-With Redis enabled:
-- Parliament lookups are cached for **1 hour** — repeated searches for the same MP are instant
-- AI analysis results are cached for **24 hours** per MP + prompt style combination
-- Prompt version is included in the cache key, so saving a new prompt version (`summary_v2.txt`) automatically invalidates old cached results
-
-Without Redis the app works identically — caching is silently disabled.
-
-### 7. Deploy
-
-Railway deploys automatically on every push to `main`. Once the build completes, click the generated URL to open the live app.
+| `REDIS_URL` / `DATABASE_URL` / `PORT` | Set automatically by Railway — do not override |
+| `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` | Optional — Langfuse observability ([cloud.langfuse.com](https://cloud.langfuse.com)) |
+| `R2_ACCOUNT_ID` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` | Optional — Cloudflare R2 card CDN caching |
+| `R2_BUCKET_NAME` / `R2_PUBLIC_URL` | Optional — R2 bucket name and public URL |
 
 ---
 
