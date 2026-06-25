@@ -8,7 +8,7 @@ Set THEYWORKFORYOU_API_KEY in your .env to enable this.
 import os
 import requests
 
-BASE = "https://www.theyworkforyou.com/api"
+BASE = os.environ.get("TWFY_API_URL", "https://www.theyworkforyou.com/api")
 
 
 def _key() -> str | None:

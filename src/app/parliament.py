@@ -2,14 +2,14 @@
 UK Parliament API client.
 Fetches MP details and financial interests from the official Parliament APIs.
 """
-
+import os
 import requests
 from app.text_utils import normalize_name, best_fuzzy_match
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-MEMBERS_API = "https://members-api.parliament.uk/api"
-INTERESTS_API = "https://interests-api.parliament.uk/api/v1"
+MEMBERS_API = os.environ.get("MEMBERS_API", "https://members-api.parliament.uk/api")
+INTERESTS_API = os.environ.get("INTERESTS_API", "https://interests-api.parliament.uk/api/v1")
 
 _normalize = normalize_name
 

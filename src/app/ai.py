@@ -13,6 +13,10 @@ import anthropic
 import logging as _logging
 from app.circuit_breaker import CircuitBreaker, CircuitOpenError  # noqa: F401  (re-exported for callers)
 
+
+_ANTHROPIC_BASE_URL = os.environ.get("ANTHROPIC_BASE_URL") or None
+
+
 # Explicit per-request ceiling for Claude calls. The SDK default is ~10 minutes,
 # which would let a hung request pin a worker thread; 60s is generous for a
 # 1,200-token generation but bounds the damage so the breaker can act on it.
@@ -160,7 +164,7 @@ def analyze(
         f"Declared financial interests:\n{interests_text}"
     )
 
-    client = anthropic.Anthropic(api_key=api_key, timeout=_ANTHROPIC_TIMEOUT)
+    client = anthropic.Anthropic(api_key=api_key, timeout=_ANTHROPIC_TIMEOUT, base_url=_ANTHROPIC_BASE_URL)
 
     def _call_claude():
         # Routed through the shared breaker so a slow/dead Claude fails fast
@@ -243,7 +247,7 @@ def resolve_person_to_company(donor_name: str, mp_name: str | None = None) -> tu
     if not api_key:
         return None, None
     try:
-        client = anthropic.Anthropic(api_key=api_key)
+        client = anthropic.Anthropic(api_key=api_key, base_url=_ANTHROPIC_BASE_URL)
         if _langfuse_client:
             with _langfuse_client.start_as_current_observation(
                 name="resolve_person_to_company",
@@ -292,7 +296,7 @@ def resolve_company_domain(company_name: str, mp_name: str | None = None) -> str
     if not api_key:
         return None
     try:
-        client = anthropic.Anthropic(api_key=api_key)
+        client = anthropic.Anthropic(api_key=api_key, base_url=_ANTHROPIC_BASE_URL)
         if _langfuse_client:
             with _langfuse_client.start_as_current_observation(
                 name="resolve_company_domain",
