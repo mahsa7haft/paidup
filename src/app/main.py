@@ -17,6 +17,7 @@ from app.parliament import (
 from app.card import generate_card, generate_mobile_card, get_badge_layout
 import app.r2 as r2
 from app.ai import analyze, prompt_options, get_prompt_version
+from app.circuit_breaker import CircuitOpenError
 from app.theyworkforyou import get_mp_data as get_twfy_data
 import app.cache as cache
 import app.database as db
@@ -203,6 +204,12 @@ def analyze_mp():
             cache.set(ck, result, ttl=cache.ANALYSIS_TTL)
 
         return jsonify(result)
+    except CircuitOpenError:
+        # Breaker is open — Claude has been failing, so fail fast instead of
+        # adding load. Tell the client it's a temporary, retryable condition.
+        return jsonify({
+            "error": "AI analysis is paused while we wait for the AI service to recover. Please try again in a minute."
+        }), 503
     except ValueError as e:
         return jsonify({"error": str(e)}), 503
     except Exception as e:
