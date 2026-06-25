@@ -11,6 +11,26 @@ import re
 from pathlib import Path
 import anthropic
 import logging as _logging
+from app.circuit_breaker import CircuitBreaker, CircuitOpenError  # noqa: F401  (re-exported for callers)
+
+# Explicit per-request ceiling for Claude calls. The SDK default is ~10 minutes,
+# which would let a hung request pin a worker thread; 60s is generous for a
+# 1,200-token generation but bounds the damage so the breaker can act on it.
+_ANTHROPIC_TIMEOUT = float(os.environ.get("ANTHROPIC_TIMEOUT", "60"))
+
+# Failures that mean "the dependency is broken" and should trip the breaker.
+# Deliberately excludes RateLimitError (429 — throttled, not down) and
+# AuthenticationError (401 — misconfig, not down): those are not "Claude is down".
+_BREAKER_TRIP_ERRORS = (anthropic.APIConnectionError, anthropic.InternalServerError)
+
+# One breaker shared by every Anthropic call — it protects the *dependency*,
+# not a single function, so all Claude calls short-circuit together when it opens.
+_anthropic_breaker = CircuitBreaker(
+    name="anthropic",
+    failure_threshold=4,
+    recovery_timeout=30.0,
+    expected_exception=_BREAKER_TRIP_ERRORS,
+)
 try:
     from langfuse import Langfuse
     _langfuse_client = Langfuse() if (os.environ.get("LANGFUSE_PUBLIC_KEY") and os.environ.get("LANGFUSE_SECRET_KEY")) else None
@@ -140,7 +160,18 @@ def analyze(
         f"Declared financial interests:\n{interests_text}"
     )
 
-    client = anthropic.Anthropic(api_key=api_key)
+    client = anthropic.Anthropic(api_key=api_key, timeout=_ANTHROPIC_TIMEOUT)
+
+    def _call_claude():
+        # Routed through the shared breaker so a slow/dead Claude fails fast
+        # instead of pinning worker threads.
+        return _anthropic_breaker.call(
+            client.messages.create,
+            model="claude-sonnet-4-6",
+            max_tokens=1200,
+            system=prompt_cfg["system"] + _SHARED_RULES,
+            messages=[{"role": "user", "content": user_message}],
+        )
 
     if _langfuse_client:
         try:
@@ -151,27 +182,21 @@ def analyze(
                 input=user_message,
                 metadata={"mp": mp_name, "prompt_key": prompt_key, "prompt_version": prompt_cfg["version"]},
             ):
-                message = client.messages.create(
-                    model="claude-sonnet-4-6",
-                    max_tokens=1200,
-                    system=prompt_cfg["system"] + _SHARED_RULES,
-                    messages=[{"role": "user", "content": user_message}],
-                )
+                message = _call_claude()
                 _langfuse_client.update_current_generation(
                     output=message.content[0].text,
                     usage_details={"input": message.usage.input_tokens, "output": message.usage.output_tokens},
                 )
             _langfuse_client.flush()
             return message.content[0].text
+        except (CircuitOpenError, anthropic.APIError):
+            # Claude failures (and an open breaker) belong to the caller's handler —
+            # don't swallow them here and fall through to an untraced second call.
+            raise
         except Exception as lf_exc:
             _logging.getLogger(__name__).warning("Langfuse trace failed: %s", lf_exc)
 
-    message = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=1200,
-        system=prompt_cfg["system"] + _SHARED_RULES,
-        messages=[{"role": "user", "content": user_message}],
-    )
+    message = _call_claude()
     return message.content[0].text
 
 
