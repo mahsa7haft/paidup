@@ -23,6 +23,10 @@
     /* Header */
     .site-header { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.3rem; }
     .logo-mark { flex-shrink: 0; display: block; }
+    .ask-link { margin-left: auto; background: #1D9E75; color: #fff; text-decoration: none;
+                font-size: 0.85rem; font-weight: 600; padding: 0.45rem 0.9rem; border-radius: 6px;
+                white-space: nowrap; transition: background 0.15s; }
+    .ask-link:hover { background: #178a64; }
     h1 { font-size: 1.6rem; font-weight: 700; color: #1D9E75; }
     p.sub { color: #888; margin: 0.3rem 0 1.8rem; font-size: 0.93rem; }
 
@@ -255,6 +259,9 @@
       <line x1="25.5" y1="25.5" x2="37" y2="37" stroke="#1D9E75" stroke-width="3" stroke-linecap="round"/>
     </svg>
     <h1>Paid <span style="color:#1D9E75">Up</span></h1>
+    {% if ask_url %}
+    <a class="ask-link" href="{{ ask_url }}">💬 Ask the AI</a>
+    {% endif %}
   </div>
   <p class="sub">See who funds your MP.</p>
 
