@@ -62,7 +62,13 @@ def members():
 
 @app.route("/")
 def index():
-    return render_template("index.html", prompt_options=prompt_options())
+    # ASK_URL points at the paidup-intelligence /ask service; the "Ask the AI" button
+    # only appears when it's set, so this is safe to deploy before the service is live.
+    return render_template(
+        "index.html",
+        prompt_options=prompt_options(),
+        ask_url=os.environ.get("ASK_URL", ""),
+    )
 
 
 @app.route("/lookup", methods=["POST"])
