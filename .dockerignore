@@ -1,0 +1,14 @@
+.git
+.venv*
+.env
+__pycache__
+*.pyc
+.pytest_cache
+tests
+docs
+grafana
+demo.gif
+*.svg
+generate_og_image.py
+.claude
+.vscode
